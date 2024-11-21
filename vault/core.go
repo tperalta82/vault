@@ -72,10 +72,6 @@ import (
 )
 
 const (
-	// CoreLockPath is the path used to acquire a coordinating lock
-	// for a highly-available deploy.
-	CoreLockPath = "core/lock"
-
 	// The poison pill is used as a check during certain scenarios to indicate
 	// to standby nodes that they should seal
 	poisonPillPath   = "core/poison-pill"
@@ -167,6 +163,8 @@ var (
 	// step down of the active node, to prevent instantly regrabbing the lock.
 	// It's var not const so that tests can manipulate it.
 	manualStepDownSleepPeriod = 10 * time.Second
+
+	CoreLockPath = "core/lock"
 )
 
 // NonFatalError is an error that can be returned during NewCore that should be
@@ -732,6 +730,8 @@ type Core struct {
 	clusterAddrBridge *raft.ClusterAddrBridge
 
 	censusManager *CensusManager
+
+	CoreLockSuffix string
 }
 
 func (c *Core) ActiveNodeClockSkewMillis() int64 {
@@ -912,6 +912,8 @@ type CoreConfig struct {
 	PeriodicLeaderRefreshInterval time.Duration
 
 	ClusterAddrBridge *raft.ClusterAddrBridge
+
+	CoreLockSuffix string
 }
 
 // GetServiceRegistration returns the config's ServiceRegistration, or nil if it does
@@ -1091,6 +1093,7 @@ func CreateCore(conf *CoreConfig) (*Core, error) {
 		echoDuration:                   uberAtomic.NewDuration(0),
 		activeNodeClockSkewMillis:      uberAtomic.NewInt64(0),
 		periodicLeaderRefreshInterval:  conf.PeriodicLeaderRefreshInterval,
+		CoreLockSuffix:                 conf.CoreLockSuffix,
 	}
 
 	c.standbyStopCh.Store(make(chan struct{}))
@@ -1350,6 +1353,10 @@ func NewCore(conf *CoreConfig) (*Core, error) {
 	c.events.Start()
 
 	c.clusterAddrBridge = conf.ClusterAddrBridge
+
+	if conf.CoreLockSuffix != "" {
+		CoreLockPath = CoreLockPath + "/" + conf.CoreLockSuffix
+	}
 
 	return c, nil
 }

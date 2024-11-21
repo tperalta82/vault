@@ -54,7 +54,9 @@ type SharedConfig struct {
 
 	ClusterName string `hcl:"cluster_name"`
 
-	AdministrativeNamespacePath string `hcl:"administrative_namespace_path"`
+	AdministrativeNamespacePath string      `hcl:"administrative_namespace_path"`
+	CoreLockSuffix              string      `hcl:"-"`
+	CoreLockSuffixRaw           interface{} `hcl:"core_lock_suffix"`
 }
 
 func ParseConfig(d string) (*SharedConfig, error) {
@@ -85,6 +87,14 @@ func ParseConfig(d string) (*SharedConfig, error) {
 		}
 		result.FoundKeys = append(result.FoundKeys, "DisableMlock")
 		result.DisableMlockRaw = nil
+	}
+
+	if result.CoreLockSuffixRaw != nil {
+		if result.CoreLockSuffix, err = parseutil.ParseString(result.CoreLockSuffixRaw); err != nil {
+			return nil, err
+		}
+		result.FoundKeys = append(result.FoundKeys, "CoreLockSuffix")
+		result.CoreLockSuffixRaw = nil
 	}
 
 	list, ok := obj.Node.(*ast.ObjectList)
@@ -184,6 +194,7 @@ func (c *SharedConfig) Sanitized() map[string]interface{} {
 		"pid_file":                      c.PidFile,
 		"cluster_name":                  c.ClusterName,
 		"administrative_namespace_path": c.AdministrativeNamespacePath,
+		"core_lock_suffix":              c.CoreLockSuffix,
 	}
 
 	// Optional log related settings
