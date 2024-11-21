@@ -1379,6 +1379,9 @@ func (c *ServerCommand) Run(args []string) int {
 		}
 	}
 
+	info["core lock"] = vault.CoreLockPath
+	infoKeys = append(infoKeys, "core lock")
+
 	status, lns, clusterAddrs, errMsg := c.InitListeners(config, disableClustering, &infoKeys, &info)
 
 	if status != 0 {
