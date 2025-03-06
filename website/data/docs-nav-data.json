@@ -404,10 +404,10 @@
           "color": "neutral"
         },
         "path": "configuration/entropy-augmentation"
-      },
-
+      },  
+      
       { "heading": "Configuration stanzas" },
-
+    
       {
         "title": "<code>adaptive_overload_protection</code>",
         "badge": {
@@ -1883,20 +1883,12 @@
         }
       },
       {
-        "title": "AWS Secret Manager",
-        "path": "import/awssm"
-      },
-      {
-        "title": "Azure KeyVault",
-        "path": "import/azurekv"
-      },
-      {
         "title": "GCP Secret Manager",
         "path": "import/gcpsm"
       },
       {
-        "title": "HashiCorp Vault",
-        "path": "import/vault"
+        "title": "Mappings",
+        "path": "import/mappings"
       }
     ]
   },
@@ -2843,6 +2835,10 @@
       {
         "title": "Overview",
         "path": "release-notes"
+      },
+      {
+        "title": "1.19.0",
+        "path": "release-notes/1.19.0"
       },
       {
         "title": "1.18.0",
