@@ -261,20 +261,32 @@ export default Service.extend({
     return userRootNamespace;
   },
 
+  // TODO CMB changes below are stopgaps until this method is un-abstracted
+  // end goal is for each auth method's component to handle setting relevant parameters.
+  // this method should just accept an arg of data to persist from the response as well as:
+  // 1. generate token name and set token data
+  // 2. calculate and set expiration
+  // 3. (maybe) calculate root namespace
   async persistAuthData() {
     const [firstArg, resp] = arguments;
     const currentNamespace = this.namespaceService.path || '';
     // dropdown vs tab format
-    const mountPath = firstArg?.data?.path || firstArg?.selectedAuth;
+    //
+    // TODO adding ANOTHER conditional until this method is un-abstracted :(
+    const mountPath = firstArg?.path || firstArg?.data?.path || firstArg?.selectedAuth;
     let tokenName;
     let options;
     let backend;
+
+    // TODO move setting current backend, options, etc to method's component
     if (typeof firstArg === 'string') {
       tokenName = firstArg;
       backend = this.backendFromTokenName(tokenName);
     } else {
       options = firstArg;
-      backend = options.backend;
+      // backend is old news since it's confusing whether it refers to the auth mount path or auth type,
+      // new auth flow explicitly defines "selectedAuth" and "path"
+      backend = options?.backend || options.selectedAuth;
     }
 
     const currentBackend = {
@@ -336,9 +348,10 @@ export default Service.extend({
       displayName = (this.getTokenData(tokenName) || {}).displayName;
     }
 
-    // this is a workaround for OIDC/SAML methods WITH mfa configured. at this time mfa/validate endpoint does not
-    // return display_name (or metadata that includes it) for this auth combination.
-    // this if block can be removed if/when the API returns display_name on the mfa/validate response.
+    // this is a fallback for any methods that don't return a display name from the initial auth request (i.e. JWT)
+    // or for OIDC/SAML with mfa configured because the mfa/validate endpoint does not consistently
+    // return display_name (or metadata that includes something to be used as such).
+    // this if block can be removed if/when the API consistently returns a display_name.
     if (!displayName) {
       // if still nothing, request token data as a last resort
       try {
