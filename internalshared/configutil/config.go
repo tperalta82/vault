@@ -98,7 +98,7 @@ func ParseConfigCheckDuplicate(d string) (cfg *SharedConfig, duplicate bool, err
 
 	if result.CoreLockSuffixRaw != nil {
 		if result.CoreLockSuffix, err = parseutil.ParseString(result.CoreLockSuffixRaw); err != nil {
-			return nil, err
+			return nil, duplicate, err
 		}
 		result.FoundKeys = append(result.FoundKeys, "CoreLockSuffix")
 		result.CoreLockSuffixRaw = nil
