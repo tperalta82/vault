@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -41,7 +41,7 @@ const newConnection = async (
 
 const navToConnection = async (backend, connection) => {
   await visit('/vault/secrets');
-  await click(SES.secretsBackendLink(backend));
+  await click(GENERAL.linkTo(`${backend}/`));
   await click(GENERAL.secretTab('Connections'));
   await click(SES.secretLink(connection));
   return;
@@ -524,7 +524,7 @@ module('Acceptance | secrets/database/*', function (hooks) {
     // Check with restricted permissions
     await login(token);
     await click('[data-test-sidebar-nav-link="Secrets Engines"]');
-    assert.dom(SES.secretsBackendLink(backend)).exists('Shows backend on secret list page');
+    assert.dom(GENERAL.listItem(`${backend}/`)).exists('Shows backend on secret list page');
     await navToConnection(backend, connection);
     assert.strictEqual(
       currentURL(),

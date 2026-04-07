@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -42,7 +42,7 @@ module('Acceptance | GCP | configuration', function (hooks) {
   });
 
   test('it should prompt configuration after mounting the GCP engine', async function (assert) {
-    await visit('/vault/settings/mount-secret-backend');
+    await visit('/vault/secrets/mounts');
     await mountBackend(this.type, this.path);
 
     assert.strictEqual(
@@ -161,7 +161,7 @@ module('Acceptance | GCP | configuration', function (hooks) {
         });
 
         await click(GENERAL.textToggle);
-        await fillIn(GENERAL.textToggleTextarea, credentials);
+        await fillIn(GENERAL.maskedInput, credentials);
         await click(GENERAL.submitButton);
         // cleanup
         await runCmd(`delete sys/mounts/${this.path}`);

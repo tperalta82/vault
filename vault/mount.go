@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package vault
@@ -20,6 +20,7 @@ import (
 	"github.com/hashicorp/vault/builtin/plugin"
 	"github.com/hashicorp/vault/helper/metricsutil"
 	"github.com/hashicorp/vault/helper/namespace"
+	"github.com/hashicorp/vault/helper/pluginconsts"
 	"github.com/hashicorp/vault/helper/versions"
 	"github.com/hashicorp/vault/sdk/helper/consts"
 	"github.com/hashicorp/vault/sdk/helper/jsonutil"
@@ -83,6 +84,7 @@ const (
 	mountTypeNSCubbyhole = "ns_cubbyhole"
 	mountTypeToken       = "token"
 	mountTypeNSToken     = "ns_token"
+	mountTypeDatabase    = "database"
 
 	MountTableUpdateStorage   = true
 	MountTableNoUpdateStorage = false
@@ -569,8 +571,13 @@ func (c *Core) decodeMountTable(ctx context.Context, raw []byte) (*MountTable, e
 	}, nil
 }
 
-// Mount is used to mount a new backend to the mount table.
+// mount is used to mount a new backend to the mount table.
 func (c *Core) mount(ctx context.Context, entry *MountEntry) error {
+	return c.mountWithRequest(ctx, entry, nil)
+}
+
+// mountWithRequest is used to mount a new backend to the mount table with a request
+func (c *Core) mountWithRequest(ctx context.Context, entry *MountEntry, request *logical.Request) error {
 	// Ensure we end the path in a slash
 	if !strings.HasSuffix(entry.Path, "/") {
 		entry.Path += "/"
@@ -591,7 +598,7 @@ func (c *Core) mount(ctx context.Context, entry *MountEntry) error {
 	}
 
 	// Mount internally
-	if err := c.mountInternal(ctx, entry, MountTableUpdateStorage); err != nil {
+	if err := c.mountInternalWithRequest(ctx, entry, MountTableUpdateStorage, request); err != nil {
 		return err
 	}
 
@@ -599,6 +606,10 @@ func (c *Core) mount(ctx context.Context, entry *MountEntry) error {
 }
 
 func (c *Core) mountInternal(ctx context.Context, entry *MountEntry, updateStorage bool) error {
+	return c.mountInternalWithRequest(ctx, entry, updateStorage, nil)
+}
+
+func (c *Core) mountInternalWithRequest(ctx context.Context, entry *MountEntry, updateStorage bool, request *logical.Request) error {
 	c.mountsLock.Lock()
 	c.authLock.Lock()
 	locked := true
@@ -786,14 +797,21 @@ func (c *Core) mountInternal(ctx context.Context, entry *MountEntry, updateStora
 		c.logger.Info("successful mount", "namespace", entry.Namespace().Path, "path", entry.Path, "type", entry.Type, "version", entry.RunningVersion)
 	}
 
-	err = c.observations.RecordObservationToLedger(ctx, observations.ObservationTypeMountSecretsEnable, ns, map[string]interface{}{
+	observationData := map[string]interface{}{
 		"path":                   entry.Path,
 		"local_mount":            entry.Local,
 		"type":                   entry.Type,
 		"accessor":               entry.Accessor,
 		"plugin_version":         entry.Version,
 		"running_plugin_version": entry.RunningVersion,
-	})
+	}
+	if request != nil {
+		observationData["entity_id"] = request.EntityID
+		observationData["request_id"] = request.ID
+		observationData["client_id"] = request.ClientID
+	}
+
+	err = c.observations.RecordObservationToLedger(ctx, observations.ObservationTypeMountSecretsEnable, ns, observationData)
 	if err != nil {
 		c.logger.Error("failed to record observation after enabling mount backend", "path", entry.Path, "error", err)
 	}
@@ -842,9 +860,15 @@ func (c *Core) builtinTypeFromMountEntry(ctx context.Context, entry *MountEntry)
 	return consts.PluginTypeUnknown
 }
 
-// Unmount is used to unmount a path. The boolean indicates whether the mount
+// unmount is used to unmount a path. The boolean indicates whether the mount
 // was found.
 func (c *Core) unmount(ctx context.Context, path string) error {
+	return c.unmountWithRequest(ctx, path, nil)
+}
+
+// unmountWithRequest is used to unmount a path with a request. The boolean
+// indicates whether the mount was found.
+func (c *Core) unmountWithRequest(ctx context.Context, path string, request *logical.Request) error {
 	// Ensure we end the path in a slash
 	if !strings.HasSuffix(path, "/") {
 		path += "/"
@@ -858,7 +882,7 @@ func (c *Core) unmount(ctx context.Context, path string) error {
 	}
 
 	// Unmount mount internally
-	if err := c.unmountInternal(ctx, path, MountTableUpdateStorage); err != nil {
+	if err := c.unmountInternalWithRequest(ctx, path, MountTableUpdateStorage, request); err != nil {
 		return err
 	}
 
@@ -871,6 +895,10 @@ func (c *Core) unmount(ctx context.Context, path string) error {
 }
 
 func (c *Core) unmountInternal(ctx context.Context, path string, updateStorage bool) error {
+	return c.unmountInternalWithRequest(ctx, path, updateStorage, nil)
+}
+
+func (c *Core) unmountInternalWithRequest(ctx context.Context, path string, updateStorage bool, request *logical.Request) error {
 	ns, err := namespace.FromContext(ctx)
 	if err != nil {
 		return err
@@ -981,14 +1009,21 @@ func (c *Core) unmountInternal(ctx context.Context, path string, updateStorage b
 		c.logger.Info("successfully unmounted", "path", path, "namespace", ns.Path)
 	}
 
-	err = c.observations.RecordObservationToLedger(ctx, observations.ObservationTypeMountSecretsDisable, ns, map[string]interface{}{
-		"path":                   entry.Path,
+	observationData := map[string]interface{}{
+		"path":                   path,
 		"local_mount":            entry.Local,
 		"type":                   entry.Type,
 		"accessor":               entry.Accessor,
 		"plugin_version":         entry.Version,
 		"running_plugin_version": entry.RunningVersion,
-	})
+	}
+	if request != nil {
+		observationData["entity_id"] = request.EntityID
+		observationData["request_id"] = request.ID
+		observationData["client_id"] = request.ClientID
+	}
+
+	err = c.observations.RecordObservationToLedger(ctx, observations.ObservationTypeMountSecretsDisable, ns, observationData)
 	if err != nil {
 		c.logger.Error("failed to record observation after enabling mount backend", "path", entry.Path, "error", err)
 	}
@@ -1774,6 +1809,12 @@ func (c *Core) newLogicalBackend(ctx context.Context, entry *MountEntry, sysView
 	conf["plugin_type"] = consts.PluginTypeSecrets.String()
 	conf["plugin_version"] = pluginVersion
 
+	pluginOptionsVersion := entry.Options["version"]
+	// If Version isn't specified for a KV mount, it must be version 1.
+	if pluginOptionsVersion == "" && entry.Type == pluginconsts.SecretEngineKV {
+		pluginOptionsVersion = "1"
+	}
+
 	backendLogger := c.baseLogger.Named(fmt.Sprintf("secrets.%s.%s", t, entry.Accessor))
 	c.AddLogger(backendLogger)
 	pluginEventSender, err := c.events.WithPlugin(entry.namespace, &logical.EventPluginInfo{
@@ -1782,10 +1823,15 @@ func (c *Core) newLogicalBackend(ctx context.Context, entry *MountEntry, sysView
 		MountPath:     entry.Path,
 		Plugin:        entry.Type,
 		PluginVersion: pluginVersion,
-		Version:       entry.Options["version"],
+		Version:       pluginOptionsVersion,
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	pluginRunningVersion := pluginVersion
+	if pluginRunningVersion == "" && runningSha == "" {
+		pluginRunningVersion = versions.GetBuiltinVersion(consts.PluginTypeSecrets, entry.Type)
 	}
 
 	pluginObservationRecorder, err := c.observations.WithPlugin(entry.namespace, &logical.ObservationPluginInfo{
@@ -1794,8 +1840,8 @@ func (c *Core) newLogicalBackend(ctx context.Context, entry *MountEntry, sysView
 		MountPath:            entry.Path,
 		Plugin:               entry.Type,
 		PluginVersion:        pluginVersion,
-		RunningPluginVersion: entry.RunningVersion,
-		Version:              entry.Options["version"],
+		RunningPluginVersion: pluginRunningVersion,
+		Version:              pluginOptionsVersion,
 		Local:                entry.Local,
 	})
 	if err != nil {
@@ -1822,11 +1868,8 @@ func (c *Core) newLogicalBackend(ctx context.Context, entry *MountEntry, sysView
 		return nil, fmt.Errorf("nil backend of type %q returned from factory", t)
 	}
 
-	entry.RunningVersion = pluginVersion
+	entry.RunningVersion = pluginRunningVersion
 	entry.RunningSha256 = runningSha
-	if entry.RunningVersion == "" && entry.RunningSha256 == "" {
-		entry.RunningVersion = versions.GetBuiltinVersion(consts.PluginTypeSecrets, entry.Type)
-	}
 	addLicenseCallback(c, backend)
 
 	return backend, nil

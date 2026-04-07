@@ -4,11 +4,14 @@ package ocsp
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _FailOpenModeName = "ocspFailOpenNotSetTrueFalse"
 
 var _FailOpenModeIndex = [...]uint8{0, 18, 22, 27}
+
+const _FailOpenModeLowerName = "ocspfailopennotsettruefalse"
 
 func (i FailOpenMode) String() string {
 	if i >= FailOpenMode(len(_FailOpenModeIndex)-1) {
@@ -17,12 +20,30 @@ func (i FailOpenMode) String() string {
 	return _FailOpenModeName[_FailOpenModeIndex[i]:_FailOpenModeIndex[i+1]]
 }
 
-var _FailOpenModeValues = []FailOpenMode{0, 1, 2}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _FailOpenModeNoOp() {
+	var x [1]struct{}
+	_ = x[ocspFailOpenNotSet-(0)]
+	_ = x[FailOpenTrue-(1)]
+	_ = x[FailOpenFalse-(2)]
+}
+
+var _FailOpenModeValues = []FailOpenMode{ocspFailOpenNotSet, FailOpenTrue, FailOpenFalse}
 
 var _FailOpenModeNameToValueMap = map[string]FailOpenMode{
-	_FailOpenModeName[0:18]:  0,
-	_FailOpenModeName[18:22]: 1,
-	_FailOpenModeName[22:27]: 2,
+	_FailOpenModeName[0:18]:       ocspFailOpenNotSet,
+	_FailOpenModeLowerName[0:18]:  ocspFailOpenNotSet,
+	_FailOpenModeName[18:22]:      FailOpenTrue,
+	_FailOpenModeLowerName[18:22]: FailOpenTrue,
+	_FailOpenModeName[22:27]:      FailOpenFalse,
+	_FailOpenModeLowerName[22:27]: FailOpenFalse,
+}
+
+var _FailOpenModeNames = []string{
+	_FailOpenModeName[0:18],
+	_FailOpenModeName[18:22],
+	_FailOpenModeName[22:27],
 }
 
 // FailOpenModeString retrieves an enum value from the enum constants string name.
@@ -31,12 +52,23 @@ func FailOpenModeString(s string) (FailOpenMode, error) {
 	if val, ok := _FailOpenModeNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _FailOpenModeNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to FailOpenMode values", s)
 }
 
 // FailOpenModeValues returns all values of the enum
 func FailOpenModeValues() []FailOpenMode {
 	return _FailOpenModeValues
+}
+
+// FailOpenModeStrings returns a slice of all String values of the enum
+func FailOpenModeStrings() []string {
+	strs := make([]string, len(_FailOpenModeNames))
+	copy(strs, _FailOpenModeNames)
+	return strs
 }
 
 // IsAFailOpenMode returns "true" if the value is listed in the enum definition. "false" otherwise

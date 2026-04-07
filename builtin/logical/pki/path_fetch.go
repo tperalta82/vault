@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package pki
@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/hashicorp/vault/builtin/logical/pki/issuing"
+	"github.com/hashicorp/vault/builtin/logical/pki/observe"
 	"github.com/hashicorp/vault/builtin/logical/pki/revocation"
 	"github.com/hashicorp/vault/helper/constants"
 	"github.com/hashicorp/vault/sdk/framework"
+	"github.com/hashicorp/vault/sdk/helper/certutil"
 	"github.com/hashicorp/vault/sdk/helper/errutil"
 	"github.com/hashicorp/vault/sdk/logical"
 )
@@ -46,6 +48,11 @@ var pathFetchReadSchema = map[int][]framework.Response{
 			"ca_chain": {
 				Type:        framework.TypeString,
 				Description: `Issuing CA Chain`,
+				Required:    false,
+			},
+			"authority_key_id": {
+				Type:        framework.TypeString,
+				Description: `AuthorityKeyID of certificate`,
 				Required:    false,
 			},
 		},
@@ -268,6 +275,7 @@ func (b *backend) pathFetchRead(ctx context.Context, req *logical.Request, data 
 	var revocationTime int64
 	var revocationIssuerId string
 	var revocationTimeRfc3339 string
+	var authorityKeyId []byte
 
 	response = &logical.Response{
 		Data: map[string]interface{}{},
@@ -372,6 +380,7 @@ func (b *backend) pathFetchRead(ctx context.Context, req *logical.Request, data 
 	}
 
 	// Prefer fetchCAInfo to fetchCertBySerial for CA certificates.
+
 	if serial == "ca_chain" || serial == "ca" {
 		caInfo, err := sc.fetchCAInfo(defaultRef, issuing.ReadOnlyUsage)
 		if err != nil {
@@ -399,6 +408,7 @@ func (b *backend) pathFetchRead(ctx context.Context, req *logical.Request, data 
 			certificate = fullChain
 		} else if serial == "ca" {
 			certificate = caInfo.Certificate.Raw
+			authorityKeyId = caInfo.Certificate.AuthorityKeyId
 
 			if len(pemType) != 0 {
 				block := pem.Block{
@@ -469,6 +479,12 @@ func (b *backend) pathFetchRead(ctx context.Context, req *logical.Request, data 
 	}
 
 reply:
+	if len(authorityKeyId) == 0 && len(certificate) > 0 {
+		if certs, err := certutil.ParseCertsPEM(certificate); err == nil && len(certs) > 0 {
+			authorityKeyId = certs[0].AuthorityKeyId
+		}
+	}
+
 	switch {
 	case len(contentType) != 0:
 		response = &logical.Response{
@@ -499,6 +515,9 @@ reply:
 		response.Data["certificate"] = string(certificate)
 		response.Data["revocation_time"] = revocationTime
 		response.Data["revocation_time_rfc3339"] = revocationTimeRfc3339
+		if len(authorityKeyId) > 0 {
+			response.Data["authority_key_id"] = certutil.GetHexFormatted(authorityKeyId, ":")
+		}
 		// Only output this field if we have a value for it as it doesn't make sense for a
 		// bunch of code paths that go through here
 		if revocationIssuerId != "" {
@@ -509,6 +528,13 @@ reply:
 			response.Data["ca_chain"] = string(fullChain)
 		}
 	}
+
+	b.pkiObserver.RecordPKIObservation(ctx, req, observe.ObservationTypePKIReadIssuerCertificate,
+		observe.NewAdditionalPKIMetadata("pem_type", pemType),
+		observe.NewAdditionalPKIMetadata("content_type", contentType),
+		observe.NewAdditionalPKIMetadata("revocation_time", revocationTimeRfc3339),
+		observe.NewAdditionalPKIMetadata("serial_number", serial),
+	)
 
 	return
 }

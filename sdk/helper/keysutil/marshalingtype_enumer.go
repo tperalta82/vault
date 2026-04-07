@@ -4,11 +4,14 @@ package keysutil
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _MarshalingTypeName = "asn1jws"
 
 var _MarshalingTypeIndex = [...]uint8{0, 4, 7}
+
+const _MarshalingTypeLowerName = "asn1jws"
 
 func (i MarshalingType) String() string {
 	i -= 1
@@ -18,11 +21,26 @@ func (i MarshalingType) String() string {
 	return _MarshalingTypeName[_MarshalingTypeIndex[i]:_MarshalingTypeIndex[i+1]]
 }
 
-var _MarshalingTypeValues = []MarshalingType{1, 2}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _MarshalingTypeNoOp() {
+	var x [1]struct{}
+	_ = x[MarshalingTypeASN1-(1)]
+	_ = x[MarshalingTypeJWS-(2)]
+}
+
+var _MarshalingTypeValues = []MarshalingType{MarshalingTypeASN1, MarshalingTypeJWS}
 
 var _MarshalingTypeNameToValueMap = map[string]MarshalingType{
-	_MarshalingTypeName[0:4]: 1,
-	_MarshalingTypeName[4:7]: 2,
+	_MarshalingTypeName[0:4]:      MarshalingTypeASN1,
+	_MarshalingTypeLowerName[0:4]: MarshalingTypeASN1,
+	_MarshalingTypeName[4:7]:      MarshalingTypeJWS,
+	_MarshalingTypeLowerName[4:7]: MarshalingTypeJWS,
+}
+
+var _MarshalingTypeNames = []string{
+	_MarshalingTypeName[0:4],
+	_MarshalingTypeName[4:7],
 }
 
 // MarshalingTypeString retrieves an enum value from the enum constants string name.
@@ -31,12 +49,23 @@ func MarshalingTypeString(s string) (MarshalingType, error) {
 	if val, ok := _MarshalingTypeNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _MarshalingTypeNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to MarshalingType values", s)
 }
 
 // MarshalingTypeValues returns all values of the enum
 func MarshalingTypeValues() []MarshalingType {
 	return _MarshalingTypeValues
+}
+
+// MarshalingTypeStrings returns a slice of all String values of the enum
+func MarshalingTypeStrings() []string {
+	strs := make([]string, len(_MarshalingTypeNames))
+	copy(strs, _MarshalingTypeNames)
+	return strs
 }
 
 // IsAMarshalingType returns "true" if the value is listed in the enum definition. "false" otherwise

@@ -4,11 +4,14 @@ package cache
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _WhenInconsistentActionName = "FailRetryForward"
 
 var _WhenInconsistentActionIndex = [...]uint8{0, 4, 9, 16}
+
+const _WhenInconsistentActionLowerName = "failretryforward"
 
 func (i WhenInconsistentAction) String() string {
 	if i < 0 || i >= WhenInconsistentAction(len(_WhenInconsistentActionIndex)-1) {
@@ -17,12 +20,30 @@ func (i WhenInconsistentAction) String() string {
 	return _WhenInconsistentActionName[_WhenInconsistentActionIndex[i]:_WhenInconsistentActionIndex[i+1]]
 }
 
-var _WhenInconsistentActionValues = []WhenInconsistentAction{0, 1, 2}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _WhenInconsistentActionNoOp() {
+	var x [1]struct{}
+	_ = x[WhenInconsistentFail-(0)]
+	_ = x[WhenInconsistentRetry-(1)]
+	_ = x[WhenInconsistentForward-(2)]
+}
+
+var _WhenInconsistentActionValues = []WhenInconsistentAction{WhenInconsistentFail, WhenInconsistentRetry, WhenInconsistentForward}
 
 var _WhenInconsistentActionNameToValueMap = map[string]WhenInconsistentAction{
-	_WhenInconsistentActionName[0:4]:  0,
-	_WhenInconsistentActionName[4:9]:  1,
-	_WhenInconsistentActionName[9:16]: 2,
+	_WhenInconsistentActionName[0:4]:       WhenInconsistentFail,
+	_WhenInconsistentActionLowerName[0:4]:  WhenInconsistentFail,
+	_WhenInconsistentActionName[4:9]:       WhenInconsistentRetry,
+	_WhenInconsistentActionLowerName[4:9]:  WhenInconsistentRetry,
+	_WhenInconsistentActionName[9:16]:      WhenInconsistentForward,
+	_WhenInconsistentActionLowerName[9:16]: WhenInconsistentForward,
+}
+
+var _WhenInconsistentActionNames = []string{
+	_WhenInconsistentActionName[0:4],
+	_WhenInconsistentActionName[4:9],
+	_WhenInconsistentActionName[9:16],
 }
 
 // WhenInconsistentActionString retrieves an enum value from the enum constants string name.
@@ -31,12 +52,23 @@ func WhenInconsistentActionString(s string) (WhenInconsistentAction, error) {
 	if val, ok := _WhenInconsistentActionNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _WhenInconsistentActionNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to WhenInconsistentAction values", s)
 }
 
 // WhenInconsistentActionValues returns all values of the enum
 func WhenInconsistentActionValues() []WhenInconsistentAction {
 	return _WhenInconsistentActionValues
+}
+
+// WhenInconsistentActionStrings returns a slice of all String values of the enum
+func WhenInconsistentActionStrings() []string {
+	strs := make([]string, len(_WhenInconsistentActionNames))
+	copy(strs, _WhenInconsistentActionNames)
+	return strs
 }
 
 // IsAWhenInconsistentAction returns "true" if the value is listed in the enum definition. "false" otherwise

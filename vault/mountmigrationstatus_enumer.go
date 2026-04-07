@@ -4,11 +4,14 @@ package vault
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _MountMigrationStatusName = "in-progresssuccessfailure"
 
 var _MountMigrationStatusIndex = [...]uint8{0, 11, 18, 25}
+
+const _MountMigrationStatusLowerName = "in-progresssuccessfailure"
 
 func (i MountMigrationStatus) String() string {
 	if i < 0 || i >= MountMigrationStatus(len(_MountMigrationStatusIndex)-1) {
@@ -17,12 +20,30 @@ func (i MountMigrationStatus) String() string {
 	return _MountMigrationStatusName[_MountMigrationStatusIndex[i]:_MountMigrationStatusIndex[i+1]]
 }
 
-var _MountMigrationStatusValues = []MountMigrationStatus{0, 1, 2}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _MountMigrationStatusNoOp() {
+	var x [1]struct{}
+	_ = x[MigrationStatusInProgress-(0)]
+	_ = x[MigrationStatusSuccess-(1)]
+	_ = x[MigrationStatusFailure-(2)]
+}
+
+var _MountMigrationStatusValues = []MountMigrationStatus{MigrationStatusInProgress, MigrationStatusSuccess, MigrationStatusFailure}
 
 var _MountMigrationStatusNameToValueMap = map[string]MountMigrationStatus{
-	_MountMigrationStatusName[0:11]:  0,
-	_MountMigrationStatusName[11:18]: 1,
-	_MountMigrationStatusName[18:25]: 2,
+	_MountMigrationStatusName[0:11]:       MigrationStatusInProgress,
+	_MountMigrationStatusLowerName[0:11]:  MigrationStatusInProgress,
+	_MountMigrationStatusName[11:18]:      MigrationStatusSuccess,
+	_MountMigrationStatusLowerName[11:18]: MigrationStatusSuccess,
+	_MountMigrationStatusName[18:25]:      MigrationStatusFailure,
+	_MountMigrationStatusLowerName[18:25]: MigrationStatusFailure,
+}
+
+var _MountMigrationStatusNames = []string{
+	_MountMigrationStatusName[0:11],
+	_MountMigrationStatusName[11:18],
+	_MountMigrationStatusName[18:25],
 }
 
 // MountMigrationStatusString retrieves an enum value from the enum constants string name.
@@ -31,12 +52,23 @@ func MountMigrationStatusString(s string) (MountMigrationStatus, error) {
 	if val, ok := _MountMigrationStatusNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _MountMigrationStatusNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to MountMigrationStatus values", s)
 }
 
 // MountMigrationStatusValues returns all values of the enum
 func MountMigrationStatusValues() []MountMigrationStatus {
 	return _MountMigrationStatusValues
+}
+
+// MountMigrationStatusStrings returns a slice of all String values of the enum
+func MountMigrationStatusStrings() []string {
+	strs := make([]string, len(_MountMigrationStatusNames))
+	copy(strs, _MountMigrationStatusNames)
+	return strs
 }
 
 // IsAMountMigrationStatus returns "true" if the value is listed in the enum definition. "false" otherwise

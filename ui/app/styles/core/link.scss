@@ -1,15 +1,14 @@
-@use '../utils/color_variables';
 @use '../utils/font_variables';
 
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
 .link {
   background: transparent;
   border: 0;
-  color: color_variables.$blue;
+  color: var(--token-color-palette-blue-200);
   cursor: pointer;
   display: inline;
   font: inherit;

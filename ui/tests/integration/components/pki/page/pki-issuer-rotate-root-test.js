@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 import { module, test } from 'qunit';
@@ -126,12 +126,8 @@ module('Integration | Component | page/pki-issuer-rotate-root', function (hooks)
     await fillIn(GENERAL.inputByAttr('issuerName'), 'default');
     await click(GENERAL.submitButton);
     assert.dom(SELECTORS.validationError).hasText('There are 2 errors with this form.');
-    assert
-      .dom(GENERAL.inputByAttr('commonName'))
-      .hasClass('has-error-border', 'common name has error border');
-    assert
-      .dom(GENERAL.inputByAttr('issuerName'))
-      .hasClass('has-error-border', 'issuer name has error border');
+    assert.dom(GENERAL.validationErrorByAttr('commonName')).exists();
+    assert.dom(GENERAL.validationErrorByAttr('issuerName')).exists();
   });
 
   test('it sends request to rotate/internal on save when using old root settings', async function (assert) {

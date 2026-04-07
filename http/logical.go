@@ -1,10 +1,11 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package http
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -97,8 +98,12 @@ func buildLogicalRequestNoAuth(perfStandby bool, ra *vault.RouterAccess, w http.
 			responseWriter = w
 		}
 
-	case "POST", "PUT":
-		op = logical.UpdateOperation
+	case "POST", "PUT", "RECOVER":
+		if r.Method == "RECOVER" {
+			op = logical.RecoverOperation
+		} else {
+			op = logical.UpdateOperation
+		}
 
 		// Buffer the request body in order to allow us to peek at the beginning
 		// without consuming it. This approach involves no copying.
@@ -147,7 +152,7 @@ func buildLogicalRequestNoAuth(perfStandby bool, ra *vault.RouterAccess, w http.
 				if err != nil {
 					status := http.StatusBadRequest
 					logical.AdjustErrorStatusCode(&status, err)
-					return nil, nil, status, fmt.Errorf("error parsing JSON")
+					return nil, nil, status, fmt.Errorf("error parsing JSON: %w", err)
 				}
 			}
 		}
@@ -205,7 +210,7 @@ func buildLogicalRequestNoAuth(perfStandby bool, ra *vault.RouterAccess, w http.
 		return nil, nil, http.StatusInternalServerError, fmt.Errorf("failed to generate identifier for the request: %w", err)
 	}
 
-	var requiredSnapshotID string
+	var requiredSnapshotID, recoverSourcePath string
 
 	// check for a read, list, or recover from snapshot request
 	switch op {
@@ -218,13 +223,28 @@ func buildLogicalRequestNoAuth(perfStandby bool, ra *vault.RouterAccess, w http.
 				data = nil
 			}
 		}
-	case logical.UpdateOperation:
-		queryVals := r.URL.Query()
-		if queryVals.Has(VaultSnapshotRecoverParam) {
-			snapshotID := queryVals.Get(VaultSnapshotRecoverParam)
-			if snapshotID != "" {
-				requiredSnapshotID = snapshotID
-				op = logical.RecoverOperation
+	case logical.UpdateOperation, logical.RecoverOperation:
+		snapshotHeaderID := r.Header.Get(VaultSnapshotRecoverHeader)
+		if snapshotHeaderID != "" {
+			requiredSnapshotID = snapshotHeaderID
+		} else {
+			queryVals := r.URL.Query()
+			if queryVals.Has(VaultSnapshotRecoverParam) {
+				snapshotID := queryVals.Get(VaultSnapshotRecoverParam)
+				if snapshotID != "" {
+					requiredSnapshotID = snapshotID
+				}
+			}
+		}
+		if requiredSnapshotID == "" && op == logical.RecoverOperation {
+			return nil, nil, http.StatusBadRequest, fmt.Errorf("missing required snapshot ID")
+		}
+
+		if requiredSnapshotID != "" {
+			op = logical.RecoverOperation
+			sourcePath := r.Header.Get(VaultRecoverSourcePathHeader)
+			if sourcePath != "" {
+				recoverSourcePath = trimPath(ns, sourcePath)
 			}
 		}
 	}
@@ -237,6 +257,7 @@ func buildLogicalRequestNoAuth(perfStandby bool, ra *vault.RouterAccess, w http.
 		Connection:         getConnection(r),
 		Headers:            r.Header,
 		RequiresSnapshotID: requiredSnapshotID,
+		RecoverSourcePath:  recoverSourcePath,
 	}
 
 	if ra != nil && ra.IsLimitedPath(r.Context(), path) {
@@ -407,6 +428,17 @@ func handleLogicalInternal(core *vault.Core, injectDataIntoTopLevel bool, noForw
 			return
 		}
 
+		// For binary paths we expect the plugin to read directly from the body so we need to ensure
+		// the original body is still available for the forwarding case on entity creation on a perf standby
+		var binaryBuf *bytes.Buffer
+		ra := core.RouterAccess()
+		if ra.IsBinaryPath(r.Context(), trimmedPath) {
+			binaryBuf = &bytes.Buffer{}
+			binaryTeeReader := io.NopCloser(io.TeeReader(r.Body, binaryBuf))
+			r.Body = binaryTeeReader
+			r = r.WithContext(logical.CreateContextOriginalBody(r.Context(), binaryTeeReader))
+		}
+
 		// Make the internal request. We attach the connection info
 		// as well in case this is an authentication request that requires
 		// it. Vault core handles stripping this if we need to. This also
@@ -422,6 +454,12 @@ func handleLogicalInternal(core *vault.Core, injectDataIntoTopLevel bool, noForw
 			return
 		case needsForward && !noForward:
 			if origBody != nil {
+				if binaryBuf != nil && binaryBuf.Len() > 0 {
+					// If this is a binary path, we may need to use the buffered body for forwarding
+					// since the original body has been consumed by the plugin. We can use the buffered
+					// data to create a new reader for the forward request.
+					origBody = newMultiReaderCloser(origBody, binaryBuf)
+				}
 				r.Body = origBody
 			}
 			forwardRequest(core, w, r)

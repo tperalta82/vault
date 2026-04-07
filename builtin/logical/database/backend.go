@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package database
@@ -108,6 +108,7 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 				"config/*",
 				"static-role/*",
 			},
+			AllowSnapshotRead: []string{"static-roles/*", "static-roles", "static-creds/*"},
 		},
 		Paths: framework.PathAppend(
 			[]*framework.Path{
@@ -130,14 +131,7 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 		WALRollback:       b.walRollback,
 		WALRollbackMinAge: minRootCredRollbackAge,
 		BackendType:       logical.TypeLogical,
-		RotateCredential: func(ctx context.Context, request *logical.Request) error {
-			name, err := b.getDatabaseConfigNameFromRotationID(request.RotationID)
-			if err != nil {
-				return err
-			}
-			_, err = b.rotateRootCredentials(ctx, request, name)
-			return err
-		},
+		RotateCredential:  b.rotateRootCredential,
 	}
 
 	b.logger = conf.Logger
@@ -174,8 +168,10 @@ func (b *databaseBackend) collectPluginInstanceGaugeValues(context.Context) ([]m
 type databaseBackend struct {
 	// connections holds configured database connections by config name
 	createConnectionLock sync.Mutex
-	connections          *syncmap.SyncMap[string, *dbPluginInstance]
-	logger               log.Logger
+
+	// Connections are loaded lazily, when a connection to a specific database plugin is needed.
+	connections *syncmap.SyncMap[string, *dbPluginInstance]
+	logger      log.Logger
 
 	*framework.Backend
 	// credRotationQueue is an in-memory priority queue used to track Static Roles
@@ -494,6 +490,38 @@ func (b *databaseBackend) dbEvent(ctx context.Context,
 	}
 }
 
+type AdditionalDatabaseMetadata struct {
+	key   string
+	value interface{}
+}
+
+func recordDatabaseObservation(ctx context.Context, b *databaseBackend, req *logical.Request, connectionName string, observationType string,
+	additionalMetadata ...AdditionalDatabaseMetadata,
+) {
+	metadata := map[string]interface{}{}
+
+	if req != nil {
+		metadata["path"] = req.Path
+		metadata["client_id"] = req.ClientID
+		metadata["entity_id"] = req.EntityID
+		metadata["request_id"] = req.ID
+	}
+
+	if connectionName != "" {
+		metadata["connection_name"] = connectionName
+	}
+
+	for _, meta := range additionalMetadata {
+		metadata[meta.key] = meta.value
+	}
+
+	err := b.RecordObservation(ctx, observationType, metadata)
+
+	if err != nil && !errors.Is(err, framework.ErrNoObservations) {
+		b.Logger().Error("error recording observation", "observationType", observationType, "error", err)
+	}
+}
+
 func (b *databaseBackend) getDatabaseConfigNameFromRotationID(path string) (string, error) {
 	if !databaseConfigNameFromRotationIDRegex.MatchString(path) {
 		return "", fmt.Errorf("no name found from rotation ID")
@@ -503,6 +531,26 @@ func (b *databaseBackend) getDatabaseConfigNameFromRotationID(path string) (stri
 		return "", fmt.Errorf("unexpected number of matches (%d) for name in rotation ID", len(res))
 	}
 	return res[1], nil
+}
+
+// GetConnectionMetrics returns a count of the active Database connections.
+// The returned count depends on the database connections map which is not
+// guaranteed to be an exhaustive list of all configured connections.
+func (b *databaseBackend) GetConnectionMetrics() (map[string]int, error) {
+	// Access the private b.connections field here
+	counts := make(map[string]int)
+	connectionsCopy := b.connections.Values()
+
+	for _, v := range connectionsCopy {
+		dbType, err := v.database.Type()
+		if err != nil {
+			continue
+		}
+
+		counts[dbType]++
+	}
+
+	return counts, nil
 }
 
 const backendHelp = `

@@ -4,11 +4,14 @@ package vault
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _sealMigrationCheckResultName = "errorskipadjustdo_not_ajust"
 
 var _sealMigrationCheckResultIndex = [...]uint8{0, 5, 9, 15, 27}
+
+const _sealMigrationCheckResultLowerName = "errorskipadjustdo_not_ajust"
 
 func (i sealMigrationCheckResult) String() string {
 	if i < 0 || i >= sealMigrationCheckResult(len(_sealMigrationCheckResultIndex)-1) {
@@ -17,13 +20,34 @@ func (i sealMigrationCheckResult) String() string {
 	return _sealMigrationCheckResultName[_sealMigrationCheckResultIndex[i]:_sealMigrationCheckResultIndex[i+1]]
 }
 
-var _sealMigrationCheckResultValues = []sealMigrationCheckResult{0, 1, 2, 3}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _sealMigrationCheckResultNoOp() {
+	var x [1]struct{}
+	_ = x[sealMigrationCheckError-(0)]
+	_ = x[sealMigrationCheckSkip-(1)]
+	_ = x[sealMigrationCheckAdjust-(2)]
+	_ = x[sealMigrationCheckDoNotAjust-(3)]
+}
+
+var _sealMigrationCheckResultValues = []sealMigrationCheckResult{sealMigrationCheckError, sealMigrationCheckSkip, sealMigrationCheckAdjust, sealMigrationCheckDoNotAjust}
 
 var _sealMigrationCheckResultNameToValueMap = map[string]sealMigrationCheckResult{
-	_sealMigrationCheckResultName[0:5]:   0,
-	_sealMigrationCheckResultName[5:9]:   1,
-	_sealMigrationCheckResultName[9:15]:  2,
-	_sealMigrationCheckResultName[15:27]: 3,
+	_sealMigrationCheckResultName[0:5]:        sealMigrationCheckError,
+	_sealMigrationCheckResultLowerName[0:5]:   sealMigrationCheckError,
+	_sealMigrationCheckResultName[5:9]:        sealMigrationCheckSkip,
+	_sealMigrationCheckResultLowerName[5:9]:   sealMigrationCheckSkip,
+	_sealMigrationCheckResultName[9:15]:       sealMigrationCheckAdjust,
+	_sealMigrationCheckResultLowerName[9:15]:  sealMigrationCheckAdjust,
+	_sealMigrationCheckResultName[15:27]:      sealMigrationCheckDoNotAjust,
+	_sealMigrationCheckResultLowerName[15:27]: sealMigrationCheckDoNotAjust,
+}
+
+var _sealMigrationCheckResultNames = []string{
+	_sealMigrationCheckResultName[0:5],
+	_sealMigrationCheckResultName[5:9],
+	_sealMigrationCheckResultName[9:15],
+	_sealMigrationCheckResultName[15:27],
 }
 
 // sealMigrationCheckResultString retrieves an enum value from the enum constants string name.
@@ -32,12 +56,23 @@ func sealMigrationCheckResultString(s string) (sealMigrationCheckResult, error) 
 	if val, ok := _sealMigrationCheckResultNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _sealMigrationCheckResultNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to sealMigrationCheckResult values", s)
 }
 
 // sealMigrationCheckResultValues returns all values of the enum
 func sealMigrationCheckResultValues() []sealMigrationCheckResult {
 	return _sealMigrationCheckResultValues
+}
+
+// sealMigrationCheckResultStrings returns a slice of all String values of the enum
+func sealMigrationCheckResultStrings() []string {
+	strs := make([]string, len(_sealMigrationCheckResultNames))
+	copy(strs, _sealMigrationCheckResultNames)
+	return strs
 }
 
 // IsAsealMigrationCheckResult returns "true" if the value is listed in the enum definition. "false" otherwise

@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 module "autopilot_upgrade_storageconfig" {
@@ -56,6 +56,18 @@ module "create_vpc" {
   common_tags = var.tags
 }
 
+module "cloud_docker_vault_cluster" {
+  source = "./modules/cloud_docker_vault_cluster"
+}
+
+module "docker_namespace_token" {
+  source = "./modules/docker_namespace_token"
+}
+
+module "docker_network" {
+  source = "./modules/docker_network"
+}
+
 module "choose_follower_host" {
   source = "./modules/choose_follower_host"
 }
@@ -90,6 +102,14 @@ module "generate_secondary_token" {
   source = "./modules/generate_secondary_token"
 
   vault_install_dir = var.vault_install_dir
+}
+
+module "hcp_create_vault_cluster" {
+  source = "./modules/hcp/create_vault_cluster"
+}
+
+module "hcp_create_admin_token" {
+  source = "./modules/hcp/create_admin_token"
 }
 
 module "install_packages" {
@@ -128,6 +148,12 @@ module "seal_pkcs11" {
 
   cluster_ssh_keypair = var.aws_ssh_keypair_name
   common_tags         = var.tags
+}
+
+module "set_up_external_integration_target" {
+  source = "./modules/set_up_external_integration_target"
+
+  ldap_version = "1.5.0"
 }
 
 module "shutdown_node" {
@@ -278,6 +304,10 @@ module "vault_test_ui" {
   ui_run_tests = var.ui_run_tests
 }
 
+module "vault_run_blackbox_test" {
+  source = "./modules/vault_run_blackbox_test"
+}
+
 module "vault_unseal_replication_followers" {
   source = "./modules/vault_unseal_replication_followers"
 
@@ -317,15 +347,26 @@ module "vault_verify_removed_node_shim" {
 module "vault_verify_secrets_engines_create" {
   source = "./modules/verify_secrets_engines/modules/create"
 
-  create_aws_secrets_engine = var.verify_aws_secrets_engine
-  vault_install_dir         = var.vault_install_dir
+  aws_enabled       = var.verify_aws_secrets_engine
+  ldap_enabled      = var.verify_ldap_secrets_engine
+  kmip_enabled      = var.verify_kmip_secrets_engine
+  vault_install_dir = var.vault_install_dir
 }
 
 module "vault_verify_secrets_engines_read" {
   source = "./modules/verify_secrets_engines/modules/read"
 
-  verify_aws_secrets_engine = var.verify_aws_secrets_engine
-  vault_install_dir         = var.vault_install_dir
+  aws_enabled       = var.verify_aws_secrets_engine
+  ldap_enabled      = var.verify_ldap_secrets_engine
+  kmip_enabled      = var.verify_kmip_secrets_engine
+  vault_install_dir = var.vault_install_dir
+}
+
+module "vault_verify_secrets_engines_delete" {
+  source = "./modules/verify_secrets_engines/modules/delete"
+
+  ldap_enabled      = var.verify_ldap_secrets_engine
+  vault_install_dir = var.vault_install_dir
 }
 
 module "vault_verify_default_lcq" {

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -40,6 +40,24 @@ module('Acceptance | /access/identity/entities', function (hooks) {
       'vault.cluster.access.identity.index',
       'navigates to the correct route'
     );
+  });
+
+  test('it navigates away from the entities page', async function (assert) {
+    const name = `entity-${uuidv4()}`;
+    await runCmd(`vault write identity/entity name="${name}" policies="default"`);
+    await page.visit({ item_type: 'entities' });
+    await click(GENERAL.navLink('Back to main navigation'));
+    assert.strictEqual(currentRouteName(), 'vault.cluster.dashboard', 'navigates back to dashboard');
+    await runCmd(`vault delete identity/entity/name/${name}`);
+  });
+
+  test('it navigates away from the groups page', async function (assert) {
+    const name = `entity-${uuidv4()}`;
+    await runCmd(`vault write identity/group name="${name}" policies="default" type="external"`);
+    await page.visit({ item_type: 'groups' });
+    await click(GENERAL.navLink('Back to main navigation'));
+    assert.strictEqual(currentRouteName(), 'vault.cluster.dashboard', 'navigates back to dashboard');
+    await runCmd(`vault delete identity/group/name/${name}`);
   });
 
   test('it renders popup menu for entities', async function (assert) {

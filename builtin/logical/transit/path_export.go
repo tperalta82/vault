@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package transit
@@ -78,7 +78,7 @@ func (b *backend) pathPolicyExportRead(ctx context.Context, req *logical.Request
 	case exportTypeCertificateChain:
 	case exportTypeCMACKey:
 		if !constants.IsEnterprise {
-			return logical.ErrorResponse(ErrCmacEntOnly.Error()), logical.ErrInvalidRequest
+			return logical.ErrorResponse(fmt.Sprintf(ErrKeyTypeEntOnly, exportTypeCMACKey)), logical.ErrInvalidRequest
 		}
 	default:
 		return logical.ErrorResponse(fmt.Sprintf("invalid export type: %s", exportType)), logical.ErrInvalidRequest
@@ -129,6 +129,7 @@ func (b *backend) pathPolicyExportRead(ctx context.Context, req *logical.Request
 			retKeys[k] = exportKey
 		}
 
+		b.TryRecordObservationWithRequest(ctx, req, ObservationTypeTransitKeyExport, b.keyPolicyObservationMetadata(p))
 	default:
 		var versionValue int
 		if version == "latest" {
@@ -155,6 +156,9 @@ func (b *backend) pathPolicyExportRead(ctx context.Context, req *logical.Request
 		}
 
 		retKeys[strconv.Itoa(versionValue)] = exportKey
+		metadata := b.keyPolicyObservationMetadata(p)
+		metadata["export_version"] = versionValue
+		b.TryRecordObservationWithRequest(ctx, req, ObservationTypeTransitKeyExport, metadata)
 	}
 
 	resp := &logical.Response{
@@ -183,7 +187,7 @@ func getExportKey(policy *keysutil.Policy, key *keysutil.KeyEntry, exportType st
 
 	case exportTypeEncryptionKey:
 		switch policy.Type {
-		case keysutil.KeyType_AES128_GCM96, keysutil.KeyType_AES256_GCM96, keysutil.KeyType_ChaCha20_Poly1305:
+		case keysutil.KeyType_AES128_GCM96, keysutil.KeyType_AES256_GCM96, keysutil.KeyType_ChaCha20_Poly1305, keysutil.KeyType_AES128_CBC, keysutil.KeyType_AES256_CBC:
 			return strings.TrimSpace(base64.StdEncoding.EncodeToString(key.Key)), nil
 
 		case keysutil.KeyType_RSA2048, keysutil.KeyType_RSA3072, keysutil.KeyType_RSA4096:

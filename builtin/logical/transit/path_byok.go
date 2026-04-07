@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package transit
@@ -98,11 +98,12 @@ func (b *backend) pathPolicyBYOKExportRead(ctx context.Context, req *logical.Req
 		return logical.ErrorResponse("key is not exportable"), nil
 	}
 
-	if srcP.Type.CMACSupported() && !constants.IsEnterprise {
-		return logical.ErrorResponse(ErrCmacEntOnly.Error()), logical.ErrInvalidRequest
+	if srcP.Type.IsEnterpriseOnly() && !constants.IsEnterprise {
+		return logical.ErrorResponse(fmt.Sprintf(ErrKeyTypeEntOnly, srcP.Type)), logical.ErrInvalidRequest
 	}
 
 	retKeys := map[string]string{}
+	var exportVersion *int
 	switch version {
 	case "":
 		for k, v := range srcP.Keys {
@@ -139,7 +140,15 @@ func (b *backend) pathPolicyBYOKExportRead(ctx context.Context, req *logical.Req
 		}
 
 		retKeys[strconv.Itoa(versionValue)] = exportKey
+		exportVersion = &versionValue
 	}
+
+	metadata := b.keyPolicyObservationMetadata(srcP)
+	if exportVersion != nil {
+		metadata["export_version"] = *exportVersion
+	}
+	metadata["destination_key"] = dstP.Name
+	b.TryRecordObservationWithRequest(ctx, req, ObservationTypeTransitKeyExportBYOK, metadata)
 
 	resp := &logical.Response{
 		Data: map[string]interface{}{
@@ -159,7 +168,7 @@ func getBYOKExportKey(dstP *keysutil.Policy, srcP *keysutil.Policy, key *keysuti
 
 	var targetKey interface{}
 	switch srcP.Type {
-	case keysutil.KeyType_AES128_GCM96, keysutil.KeyType_AES256_GCM96, keysutil.KeyType_ChaCha20_Poly1305, keysutil.KeyType_HMAC, keysutil.KeyType_AES128_CMAC, keysutil.KeyType_AES256_CMAC, keysutil.KeyType_AES192_CMAC:
+	case keysutil.KeyType_AES128_GCM96, keysutil.KeyType_AES256_GCM96, keysutil.KeyType_ChaCha20_Poly1305, keysutil.KeyType_HMAC, keysutil.KeyType_AES128_CMAC, keysutil.KeyType_AES256_CMAC, keysutil.KeyType_AES192_CMAC, keysutil.KeyType_AES128_CBC, keysutil.KeyType_AES256_CBC:
 		targetKey = key.Key
 	case keysutil.KeyType_RSA2048, keysutil.KeyType_RSA3072, keysutil.KeyType_RSA4096:
 		targetKey = key.RSAKey

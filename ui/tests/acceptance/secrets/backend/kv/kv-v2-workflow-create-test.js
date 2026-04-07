@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -11,7 +11,7 @@ import { setupApplicationTest } from 'vault/tests/helpers';
 import { login } from 'vault/tests/helpers/auth/auth-helpers';
 import { deleteEngineCmd, mountEngineCmd, runCmd, tokenWithPolicyCmd } from 'vault/tests/helpers/commands';
 import { personas } from 'vault/tests/helpers/kv/policy-generator';
-import { clearRecords, writeSecret, writeVersionedSecret } from 'vault/tests/helpers/kv/kv-run-commands';
+import { writeSecret, writeVersionedSecret } from 'vault/tests/helpers/kv/kv-run-commands';
 import { FORM, PAGE } from 'vault/tests/helpers/kv/kv-selectors';
 import { grantAccessForWrite, setupControlGroup } from 'vault/tests/helpers/control-groups';
 import { GENERAL } from 'vault/tests/helpers/general-selectors';
@@ -40,9 +40,7 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
   module('admin persona', function (hooks) {
     hooks.beforeEach(async function () {
       const token = await runCmd(tokenWithPolicyCmd(`admin-${this.backend}`, personas.admin(this.backend)));
-      await login(token);
-      clearRecords(this.store);
-      return;
+      return login(token);
     });
     test('cancel on create clears model (a)', async function (assert) {
       const backend = this.backend;
@@ -84,7 +82,7 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
       // Create secret form -- validations
       await click(FORM.saveBtn);
       assert.dom(FORM.invalidFormAlert).hasText('There is an error with this form.');
-      assert.dom(FORM.validation('path')).hasText("Path can't be blank.");
+      assert.dom(GENERAL.validationErrorByAttr('path')).hasText("Path can't be blank.");
       await typeIn(FORM.inputByAttr('path'), secretPath);
       assert
         .dom(FORM.validationWarning)
@@ -167,29 +165,29 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
 
       // Create secret
       await typeIn(FORM.inputByAttr('path'), 'my/');
-      assert.dom(FORM.validation('path')).hasText("Path can't end in forward slash '/'.");
+      assert.dom(GENERAL.validationErrorByAttr('path')).hasText("Path can't end in forward slash '/'.");
       await typeIn(FORM.inputByAttr('path'), 'secret');
-      assert.dom(FORM.validation('path')).doesNotExist('form validation goes away');
+      assert.dom(GENERAL.validationErrorByAttr('path')).doesNotExist('form validation goes away');
       await fillIn(FORM.keyInput(), 'password');
       await fillIn(FORM.maskedValueInput(), 'kittens1234');
 
       await click(FORM.toggleMetadata);
       assert.dom(PAGE.create.metadataSection).exists('Shows metadata section after toggled');
       // Check initial values
-      assert.dom(FORM.inputByAttr('maxVersions')).hasValue('0');
-      assert.dom(FORM.inputByAttr('casRequired')).isNotChecked();
+      assert.dom(FORM.inputByAttr('max_versions')).hasValue('0');
+      assert.dom(FORM.inputByAttr('cas_required')).isNotChecked();
       assert.dom(FORM.toggleByLabel('Automate secret deletion')).isNotChecked();
-      // MaxVersions validation
-      await fillIn(FORM.inputByAttr('maxVersions'), 'seven');
+      // max_versions validation
+      await fillIn(FORM.inputByAttr('max_versions'), 'seven');
       await click(FORM.saveBtn);
-      assert.dom(FORM.validation('maxVersions')).hasText('Maximum versions must be a number.');
-      await fillIn(FORM.inputByAttr('maxVersions'), '99999999999999999');
+      assert.dom(GENERAL.validationErrorByAttr('max_versions')).hasText('Maximum versions must be a number.');
+      await fillIn(FORM.inputByAttr('max_versions'), '99999999999999999');
       await click(FORM.saveBtn);
-      assert.dom(FORM.validation('maxVersions')).hasText('You cannot go over 16 characters.');
-      await fillIn(FORM.inputByAttr('maxVersions'), '7');
+      assert.dom(GENERAL.validationErrorByAttr('max_versions')).hasText('You cannot go over 16 characters.');
+      await fillIn(FORM.inputByAttr('max_versions'), '7');
 
       // Fill in other metadata
-      await click(FORM.inputByAttr('casRequired'));
+      await click(FORM.inputByAttr('cas_required'));
       await click(FORM.toggleByLabel('Automate secret deletion'));
       await fillIn(FORM.ttlValue('Automate secret deletion'), '1000');
 
@@ -346,9 +344,7 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
       const token = await runCmd(
         tokenWithPolicyCmd(`data-reader-${this.backend}`, personas.dataReader(this.backend))
       );
-      await login(token);
-      clearRecords(this.store);
-      return;
+      return login(token);
     });
     test('cancel on create clears model (dr)', async function (assert) {
       const backend = this.backend;
@@ -378,7 +374,7 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
       // Create secret form -- validations
       await click(FORM.saveBtn);
       assert.dom(FORM.invalidFormAlert).hasText('There is an error with this form.');
-      assert.dom(FORM.validation('path')).hasText("Path can't be blank.");
+      assert.dom(GENERAL.validationErrorByAttr('path')).hasText("Path can't be blank.");
       await typeIn(FORM.inputByAttr('path'), secretPath);
       assert
         .dom(FORM.validationWarning)
@@ -425,29 +421,29 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
 
       // Create secret
       await typeIn(FORM.inputByAttr('path'), 'my/');
-      assert.dom(FORM.validation('path')).hasText("Path can't end in forward slash '/'.");
+      assert.dom(GENERAL.validationErrorByAttr('path')).hasText("Path can't end in forward slash '/'.");
       await typeIn(FORM.inputByAttr('path'), 'secret');
-      assert.dom(FORM.validation('path')).doesNotExist('form validation goes away');
+      assert.dom(GENERAL.validationErrorByAttr('path')).doesNotExist('form validation goes away');
       await fillIn(FORM.keyInput(), 'password');
       await fillIn(FORM.maskedValueInput(), 'kittens1234');
 
       await click(FORM.toggleMetadata);
       assert.dom(PAGE.create.metadataSection).exists('Shows metadata section after toggled');
       // Check initial values
-      assert.dom(FORM.inputByAttr('maxVersions')).hasValue('0');
-      assert.dom(FORM.inputByAttr('casRequired')).isNotChecked();
+      assert.dom(FORM.inputByAttr('max_versions')).hasValue('0');
+      assert.dom(FORM.inputByAttr('cas_required')).isNotChecked();
       assert.dom(FORM.toggleByLabel('Automate secret deletion')).isNotChecked();
-      // MaxVersions validation
-      await fillIn(FORM.inputByAttr('maxVersions'), 'seven');
+      // max_versions validation
+      await fillIn(FORM.inputByAttr('max_versions'), 'seven');
       await click(FORM.saveBtn);
-      assert.dom(FORM.validation('maxVersions')).hasText('Maximum versions must be a number.');
-      await fillIn(FORM.inputByAttr('maxVersions'), '99999999999999999');
+      assert.dom(GENERAL.validationErrorByAttr('max_versions')).hasText('Maximum versions must be a number.');
+      await fillIn(FORM.inputByAttr('max_versions'), '99999999999999999');
       await click(FORM.saveBtn);
-      assert.dom(FORM.validation('maxVersions')).hasText('You cannot go over 16 characters.');
-      await fillIn(FORM.inputByAttr('maxVersions'), '7');
+      assert.dom(GENERAL.validationErrorByAttr('max_versions')).hasText('You cannot go over 16 characters.');
+      await fillIn(FORM.inputByAttr('max_versions'), '7');
 
       // Fill in other metadata
-      await click(FORM.inputByAttr('casRequired'));
+      await click(FORM.inputByAttr('cas_required'));
       await click(FORM.toggleByLabel('Automate secret deletion'));
       await fillIn(FORM.ttlValue('Automate secret deletion'), '1000');
 
@@ -492,9 +488,7 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
       const token = await runCmd(
         tokenWithPolicyCmd(`data-list-reader-${this.backend}`, personas.dataListReader(this.backend))
       );
-      await login(token);
-      clearRecords(this.store);
-      return;
+      return login(token);
     });
     test('cancel on create clears model (dlr)', async function (assert) {
       const backend = this.backend;
@@ -527,7 +521,7 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
       // Create secret form -- validations
       await click(FORM.saveBtn);
       assert.dom(FORM.invalidFormAlert).hasText('There is an error with this form.');
-      assert.dom(FORM.validation('path')).hasText("Path can't be blank.");
+      assert.dom(GENERAL.validationErrorByAttr('path')).hasText("Path can't be blank.");
       await typeIn(FORM.inputByAttr('path'), secretPath);
       assert
         .dom(FORM.validationWarning)
@@ -574,29 +568,29 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
 
       // Create secret
       await typeIn(FORM.inputByAttr('path'), 'my/');
-      assert.dom(FORM.validation('path')).hasText("Path can't end in forward slash '/'.");
+      assert.dom(GENERAL.validationErrorByAttr('path')).hasText("Path can't end in forward slash '/'.");
       await typeIn(FORM.inputByAttr('path'), 'secret');
-      assert.dom(FORM.validation('path')).doesNotExist('form validation goes away');
+      assert.dom(GENERAL.validationErrorByAttr('path')).doesNotExist('form validation goes away');
       await fillIn(FORM.keyInput(), 'password');
       await fillIn(FORM.maskedValueInput(), 'kittens1234');
 
       await click(FORM.toggleMetadata);
       assert.dom(PAGE.create.metadataSection).exists('Shows metadata section after toggled');
       // Check initial values
-      assert.dom(FORM.inputByAttr('maxVersions')).hasValue('0');
-      assert.dom(FORM.inputByAttr('casRequired')).isNotChecked();
+      assert.dom(FORM.inputByAttr('max_versions')).hasValue('0');
+      assert.dom(FORM.inputByAttr('cas_required')).isNotChecked();
       assert.dom(FORM.toggleByLabel('Automate secret deletion')).isNotChecked();
-      // MaxVersions validation
-      await fillIn(FORM.inputByAttr('maxVersions'), 'seven');
+      // max_versions validation
+      await fillIn(FORM.inputByAttr('max_versions'), 'seven');
       await click(FORM.saveBtn);
-      assert.dom(FORM.validation('maxVersions')).hasText('Maximum versions must be a number.');
-      await fillIn(FORM.inputByAttr('maxVersions'), '99999999999999999');
+      assert.dom(GENERAL.validationErrorByAttr('max_versions')).hasText('Maximum versions must be a number.');
+      await fillIn(FORM.inputByAttr('max_versions'), '99999999999999999');
       await click(FORM.saveBtn);
-      assert.dom(FORM.validation('maxVersions')).hasText('You cannot go over 16 characters.');
-      await fillIn(FORM.inputByAttr('maxVersions'), '7');
+      assert.dom(GENERAL.validationErrorByAttr('max_versions')).hasText('You cannot go over 16 characters.');
+      await fillIn(FORM.inputByAttr('max_versions'), '7');
 
       // Fill in other metadata
-      await click(FORM.inputByAttr('casRequired'));
+      await click(FORM.inputByAttr('cas_required'));
       await click(FORM.toggleByLabel('Automate secret deletion'));
       await fillIn(FORM.ttlValue('Automate secret deletion'), '1000');
 
@@ -641,9 +635,7 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
       const token = await runCmd(
         tokenWithPolicyCmd(`data-list-reader-${this.backend}`, personas.metadataMaintainer(this.backend))
       );
-      await login(token);
-      clearRecords(this.store);
-      return;
+      return login(token);
     });
     test('cancel on create clears model (mm)', async function (assert) {
       const backend = this.backend;
@@ -678,7 +670,7 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
       // Create secret form -- validations
       await click(FORM.saveBtn);
       assert.dom(FORM.invalidFormAlert).hasText('There is an error with this form.');
-      assert.dom(FORM.validation('path')).hasText("Path can't be blank.");
+      assert.dom(GENERAL.validationErrorByAttr('path')).hasText("Path can't be blank.");
       await typeIn(FORM.inputByAttr('path'), secretPath);
       assert
         .dom(FORM.validationWarning)
@@ -743,29 +735,29 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
 
       // Create secret
       await typeIn(FORM.inputByAttr('path'), 'my/');
-      assert.dom(FORM.validation('path')).hasText("Path can't end in forward slash '/'.");
+      assert.dom(GENERAL.validationErrorByAttr('path')).hasText("Path can't end in forward slash '/'.");
       await typeIn(FORM.inputByAttr('path'), 'secret');
-      assert.dom(FORM.validation('path')).doesNotExist('form validation goes away');
+      assert.dom(GENERAL.validationErrorByAttr('path')).doesNotExist('form validation goes away');
       await fillIn(FORM.keyInput(), 'password');
       await fillIn(FORM.maskedValueInput(), 'kittens1234');
 
       await click(FORM.toggleMetadata);
       assert.dom(PAGE.create.metadataSection).exists('Shows metadata section after toggled');
       // Check initial values
-      assert.dom(FORM.inputByAttr('maxVersions')).hasValue('0');
-      assert.dom(FORM.inputByAttr('casRequired')).isNotChecked();
+      assert.dom(FORM.inputByAttr('max_versions')).hasValue('0');
+      assert.dom(FORM.inputByAttr('cas_required')).isNotChecked();
       assert.dom(FORM.toggleByLabel('Automate secret deletion')).isNotChecked();
-      // MaxVersions validation
-      await fillIn(FORM.inputByAttr('maxVersions'), 'seven');
+      // max_versions validation
+      await fillIn(FORM.inputByAttr('max_versions'), 'seven');
       await click(FORM.saveBtn);
-      assert.dom(FORM.validation('maxVersions')).hasText('Maximum versions must be a number.');
-      await fillIn(FORM.inputByAttr('maxVersions'), '99999999999999999');
+      assert.dom(GENERAL.validationErrorByAttr('max_versions')).hasText('Maximum versions must be a number.');
+      await fillIn(FORM.inputByAttr('max_versions'), '99999999999999999');
       await click(FORM.saveBtn);
-      assert.dom(FORM.validation('maxVersions')).hasText('You cannot go over 16 characters.');
-      await fillIn(FORM.inputByAttr('maxVersions'), '7');
+      assert.dom(GENERAL.validationErrorByAttr('max_versions')).hasText('You cannot go over 16 characters.');
+      await fillIn(FORM.inputByAttr('max_versions'), '7');
 
       // Fill in other metadata
-      await click(FORM.inputByAttr('casRequired'));
+      await click(FORM.inputByAttr('cas_required'));
       await click(FORM.toggleByLabel('Automate secret deletion'));
       await fillIn(FORM.ttlValue('Automate secret deletion'), '1000');
 
@@ -838,9 +830,7 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
       const token = await runCmd(
         tokenWithPolicyCmd(`secret-creator-${this.backend}`, personas.secretCreator(this.backend))
       );
-      await login(token);
-      clearRecords(this.store);
-      return;
+      return login(token);
     });
     test('cancel on create clears model (sc)', async function (assert) {
       const backend = this.backend;
@@ -888,7 +878,7 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
       // Create secret form -- validations
       await click(FORM.saveBtn);
       assert.dom(FORM.invalidFormAlert).hasText('There is an error with this form.');
-      assert.dom(FORM.validation('path')).hasText("Path can't be blank.");
+      assert.dom(GENERAL.validationErrorByAttr('path')).hasText("Path can't be blank.");
       await typeIn(FORM.inputByAttr('path'), secretPath);
       assert
         .dom(FORM.validationWarning)
@@ -971,29 +961,29 @@ module('Acceptance | kv-v2 workflow | secret and version create', function (hook
 
       // Create secret
       await typeIn(FORM.inputByAttr('path'), 'my/');
-      assert.dom(FORM.validation('path')).hasText("Path can't end in forward slash '/'.");
+      assert.dom(GENERAL.validationErrorByAttr('path')).hasText("Path can't end in forward slash '/'.");
       await typeIn(FORM.inputByAttr('path'), 'secret');
-      assert.dom(FORM.validation('path')).doesNotExist('form validation goes away');
+      assert.dom(GENERAL.validationErrorByAttr('path')).doesNotExist('form validation goes away');
       await fillIn(FORM.keyInput(), 'password');
       await fillIn(FORM.maskedValueInput(), 'kittens1234');
 
       await click(FORM.toggleMetadata);
       assert.dom(PAGE.create.metadataSection).exists('Shows metadata section after toggled');
       // Check initial values
-      assert.dom(FORM.inputByAttr('maxVersions')).hasValue('0');
-      assert.dom(FORM.inputByAttr('casRequired')).isNotChecked();
+      assert.dom(FORM.inputByAttr('max_versions')).hasValue('0');
+      assert.dom(FORM.inputByAttr('cas_required')).isNotChecked();
       assert.dom(FORM.toggleByLabel('Automate secret deletion')).isNotChecked();
-      // MaxVersions validation
-      await fillIn(FORM.inputByAttr('maxVersions'), 'seven');
+      // max_versions validation
+      await fillIn(FORM.inputByAttr('max_versions'), 'seven');
       await click(FORM.saveBtn);
-      assert.dom(FORM.validation('maxVersions')).hasText('Maximum versions must be a number.');
-      await fillIn(FORM.inputByAttr('maxVersions'), '99999999999999999');
+      assert.dom(GENERAL.validationErrorByAttr('max_versions')).hasText('Maximum versions must be a number.');
+      await fillIn(FORM.inputByAttr('max_versions'), '99999999999999999');
       await click(FORM.saveBtn);
-      assert.dom(FORM.validation('maxVersions')).hasText('You cannot go over 16 characters.');
-      await fillIn(FORM.inputByAttr('maxVersions'), '7');
+      assert.dom(GENERAL.validationErrorByAttr('max_versions')).hasText('You cannot go over 16 characters.');
+      await fillIn(FORM.inputByAttr('max_versions'), '7');
 
       // Fill in other metadata
-      await click(FORM.inputByAttr('casRequired'));
+      await click(FORM.inputByAttr('cas_required'));
       await click(FORM.toggleByLabel('Automate secret deletion'));
       await fillIn(FORM.ttlValue('Automate secret deletion'), '1000');
 
@@ -1090,9 +1080,7 @@ path "${this.backend}/metadata/*" {
         backend: this.backend,
       });
       this.userToken = userToken;
-      await login(userToken);
-      clearRecords(this.store);
-      return;
+      return login(userToken);
     });
     test('create & update root secret with default metadata (cg)', async function (assert) {
       const backend = this.backend;
@@ -1104,7 +1092,7 @@ path "${this.backend}/metadata/*" {
       // Create secret form -- validations
       await click(FORM.saveBtn);
       assert.dom(FORM.invalidFormAlert).hasText('There is an error with this form.');
-      assert.dom(FORM.validation('path')).hasText("Path can't be blank.");
+      assert.dom(GENERAL.validationErrorByAttr('path')).hasText("Path can't be blank.");
       await typeIn(FORM.inputByAttr('path'), secretPath);
       assert.dom(PAGE.create.metadataSection).doesNotExist('Hides metadata section by default');
 

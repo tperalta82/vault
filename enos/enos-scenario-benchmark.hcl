@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 scenario "benchmark" {
@@ -90,10 +90,10 @@ scenario "benchmark" {
       edition = [for e in matrix.edition : e if !strcontains(e, "hsm")]
     }
 
-    // softhsm packages not available for leap/sles.
+    // softhsm packages not available for sles (at the time of development)
     exclude {
       seal   = ["pkcs11"]
-      distro = ["leap", "sles"]
+      distro = ["sles"]
     }
 
     // Testing in IPV6 mode is currently implemented for integrated Raft storage only
@@ -115,7 +115,6 @@ scenario "benchmark" {
     artifact_path = matrix.artifact_source != "artifactory" ? abspath(var.vault_artifact_path) : null
     enos_provider = {
       amzn   = provider.enos.ec2_user
-      leap   = provider.enos.ec2_user
       rhel   = provider.enos.ec2_user
       sles   = provider.enos.ec2_user
       ubuntu = provider.enos.ubuntu
@@ -128,20 +127,19 @@ scenario "benchmark" {
     module      = "build_${matrix.artifact_source}"
 
     variables {
-      build_tags           = var.vault_local_build_tags != null ? var.vault_local_build_tags : global.build_tags[matrix.edition]
-      artifact_path        = local.artifact_path
-      goarch               = matrix.arch
-      goos                 = "linux"
-      artifactory_host     = matrix.artifact_source == "artifactory" ? var.artifactory_host : null
-      artifactory_repo     = matrix.artifact_source == "artifactory" ? var.artifactory_repo : null
-      artifactory_username = matrix.artifact_source == "artifactory" ? var.artifactory_username : null
-      artifactory_token    = matrix.artifact_source == "artifactory" ? var.artifactory_token : null
-      arch                 = matrix.artifact_source == "artifactory" ? matrix.arch : null
-      product_version      = var.vault_product_version
-      artifact_type        = matrix.artifact_type
-      distro               = matrix.artifact_source == "artifactory" ? matrix.distro : null
-      edition              = matrix.artifact_source == "artifactory" ? matrix.edition : null
-      revision             = var.vault_revision
+      build_tags        = var.vault_local_build_tags != null ? var.vault_local_build_tags : global.build_tags[matrix.edition]
+      artifact_path     = local.artifact_path
+      goarch            = matrix.arch
+      goos              = "linux"
+      artifactory_host  = matrix.artifact_source == "artifactory" ? var.artifactory_host : null
+      artifactory_repo  = matrix.artifact_source == "artifactory" ? var.artifactory_repo : null
+      artifactory_token = matrix.artifact_source == "artifactory" ? var.artifactory_token : null
+      arch              = matrix.artifact_source == "artifactory" ? matrix.arch : null
+      product_version   = var.vault_product_version
+      artifact_type     = matrix.artifact_type
+      distro            = matrix.artifact_source == "artifactory" ? matrix.distro : null
+      edition           = matrix.artifact_source == "artifactory" ? matrix.edition : null
+      revision          = var.vault_revision
     }
   }
 

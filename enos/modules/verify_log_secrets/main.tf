@@ -1,4 +1,4 @@
-# Copyright (c) HashiCorp, Inc.
+# Copyright IBM Corp. 2016, 2025
 # SPDX-License-Identifier: BUSL-1.1
 
 terraform {
@@ -34,7 +34,7 @@ variable "radar_license_path" {
 
 variable "radar_version" {
   description = "The version of Vault Radar to install"
-  default     = "0.24.0" # must be >= 0.17.0
+  default     = "0.29.0" # must be >= 0.17.0
   // NOTE: A `semverconstraint` validation condition would be very useful here
   // when we get around to exporting our custom enos funcs in the provider.
 }

@@ -4,11 +4,14 @@ package pki
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _ifModifiedReqTypeName = "UnknownCACRLDeltaCRLUnifiedCRLUnifiedDeltaCRL"
 
 var _ifModifiedReqTypeIndex = [...]uint8{0, 7, 9, 12, 20, 30, 45}
+
+const _ifModifiedReqTypeLowerName = "unknowncacrldeltacrlunifiedcrlunifieddeltacrl"
 
 func (i ifModifiedReqType) String() string {
 	if i < 0 || i >= ifModifiedReqType(len(_ifModifiedReqTypeIndex)-1) {
@@ -17,15 +20,42 @@ func (i ifModifiedReqType) String() string {
 	return _ifModifiedReqTypeName[_ifModifiedReqTypeIndex[i]:_ifModifiedReqTypeIndex[i+1]]
 }
 
-var _ifModifiedReqTypeValues = []ifModifiedReqType{0, 1, 2, 3, 4, 5}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _ifModifiedReqTypeNoOp() {
+	var x [1]struct{}
+	_ = x[ifModifiedUnknown-(0)]
+	_ = x[ifModifiedCA-(1)]
+	_ = x[ifModifiedCRL-(2)]
+	_ = x[ifModifiedDeltaCRL-(3)]
+	_ = x[ifModifiedUnifiedCRL-(4)]
+	_ = x[ifModifiedUnifiedDeltaCRL-(5)]
+}
+
+var _ifModifiedReqTypeValues = []ifModifiedReqType{ifModifiedUnknown, ifModifiedCA, ifModifiedCRL, ifModifiedDeltaCRL, ifModifiedUnifiedCRL, ifModifiedUnifiedDeltaCRL}
 
 var _ifModifiedReqTypeNameToValueMap = map[string]ifModifiedReqType{
-	_ifModifiedReqTypeName[0:7]:   0,
-	_ifModifiedReqTypeName[7:9]:   1,
-	_ifModifiedReqTypeName[9:12]:  2,
-	_ifModifiedReqTypeName[12:20]: 3,
-	_ifModifiedReqTypeName[20:30]: 4,
-	_ifModifiedReqTypeName[30:45]: 5,
+	_ifModifiedReqTypeName[0:7]:        ifModifiedUnknown,
+	_ifModifiedReqTypeLowerName[0:7]:   ifModifiedUnknown,
+	_ifModifiedReqTypeName[7:9]:        ifModifiedCA,
+	_ifModifiedReqTypeLowerName[7:9]:   ifModifiedCA,
+	_ifModifiedReqTypeName[9:12]:       ifModifiedCRL,
+	_ifModifiedReqTypeLowerName[9:12]:  ifModifiedCRL,
+	_ifModifiedReqTypeName[12:20]:      ifModifiedDeltaCRL,
+	_ifModifiedReqTypeLowerName[12:20]: ifModifiedDeltaCRL,
+	_ifModifiedReqTypeName[20:30]:      ifModifiedUnifiedCRL,
+	_ifModifiedReqTypeLowerName[20:30]: ifModifiedUnifiedCRL,
+	_ifModifiedReqTypeName[30:45]:      ifModifiedUnifiedDeltaCRL,
+	_ifModifiedReqTypeLowerName[30:45]: ifModifiedUnifiedDeltaCRL,
+}
+
+var _ifModifiedReqTypeNames = []string{
+	_ifModifiedReqTypeName[0:7],
+	_ifModifiedReqTypeName[7:9],
+	_ifModifiedReqTypeName[9:12],
+	_ifModifiedReqTypeName[12:20],
+	_ifModifiedReqTypeName[20:30],
+	_ifModifiedReqTypeName[30:45],
 }
 
 // ifModifiedReqTypeString retrieves an enum value from the enum constants string name.
@@ -34,12 +64,23 @@ func ifModifiedReqTypeString(s string) (ifModifiedReqType, error) {
 	if val, ok := _ifModifiedReqTypeNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _ifModifiedReqTypeNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to ifModifiedReqType values", s)
 }
 
 // ifModifiedReqTypeValues returns all values of the enum
 func ifModifiedReqTypeValues() []ifModifiedReqType {
 	return _ifModifiedReqTypeValues
+}
+
+// ifModifiedReqTypeStrings returns a slice of all String values of the enum
+func ifModifiedReqTypeStrings() []string {
+	strs := make([]string, len(_ifModifiedReqTypeNames))
+	copy(strs, _ifModifiedReqTypeNames)
+	return strs
 }
 
 // IsAifModifiedReqType returns "true" if the value is listed in the enum definition. "false" otherwise

@@ -5,11 +5,14 @@ package pki_backend
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 const _RolePathPolicyName = "RPPUnknownRPPSignVerbatimRPPRole"
 
 var _RolePathPolicyIndex = [...]uint8{0, 10, 25, 32}
+
+const _RolePathPolicyLowerName = "rppunknownrppsignverbatimrpprole"
 
 func (i RolePathPolicy) String() string {
 	if i < 0 || i >= RolePathPolicy(len(_RolePathPolicyIndex)-1) {
@@ -18,12 +21,30 @@ func (i RolePathPolicy) String() string {
 	return _RolePathPolicyName[_RolePathPolicyIndex[i]:_RolePathPolicyIndex[i+1]]
 }
 
-var _RolePathPolicyValues = []RolePathPolicy{0, 1, 2}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _RolePathPolicyNoOp() {
+	var x [1]struct{}
+	_ = x[RPPUnknown-(0)]
+	_ = x[RPPSignVerbatim-(1)]
+	_ = x[RPPRole-(2)]
+}
+
+var _RolePathPolicyValues = []RolePathPolicy{RPPUnknown, RPPSignVerbatim, RPPRole}
 
 var _RolePathPolicyNameToValueMap = map[string]RolePathPolicy{
-	_RolePathPolicyName[0:10]:  0,
-	_RolePathPolicyName[10:25]: 1,
-	_RolePathPolicyName[25:32]: 2,
+	_RolePathPolicyName[0:10]:       RPPUnknown,
+	_RolePathPolicyLowerName[0:10]:  RPPUnknown,
+	_RolePathPolicyName[10:25]:      RPPSignVerbatim,
+	_RolePathPolicyLowerName[10:25]: RPPSignVerbatim,
+	_RolePathPolicyName[25:32]:      RPPRole,
+	_RolePathPolicyLowerName[25:32]: RPPRole,
+}
+
+var _RolePathPolicyNames = []string{
+	_RolePathPolicyName[0:10],
+	_RolePathPolicyName[10:25],
+	_RolePathPolicyName[25:32],
 }
 
 // RolePathPolicyString retrieves an enum value from the enum constants string name.
@@ -32,12 +53,23 @@ func RolePathPolicyString(s string) (RolePathPolicy, error) {
 	if val, ok := _RolePathPolicyNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _RolePathPolicyNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to RolePathPolicy values", s)
 }
 
 // RolePathPolicyValues returns all values of the enum
 func RolePathPolicyValues() []RolePathPolicy {
 	return _RolePathPolicyValues
+}
+
+// RolePathPolicyStrings returns a slice of all String values of the enum
+func RolePathPolicyStrings() []string {
+	strs := make([]string, len(_RolePathPolicyNames))
+	copy(strs, _RolePathPolicyNames)
+	return strs
 }
 
 // IsARolePathPolicy returns "true" if the value is listed in the enum definition. "false" otherwise

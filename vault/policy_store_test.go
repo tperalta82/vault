@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package vault
@@ -12,6 +12,7 @@ import (
 
 	log "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/vault/helper/namespace"
+	"github.com/hashicorp/vault/helper/random"
 	"github.com/hashicorp/vault/sdk/logical"
 	"github.com/stretchr/testify/require"
 )
@@ -458,11 +459,15 @@ func TestPolicyStore_DuplicateAttributes(t *testing.T) {
 	ps := core.policyStore
 	dupAttrPolicy := aclPolicy + `
 path "foo" {
-	capabilities = ["deny"]
-	capabilities = ["deny"]
+	capabilities = ["list"]
+	capabilities = ["read"]
 }
 `
+	t.Setenv(random.AllowHclDuplicatesEnvVar, "true")
 	policy, err := ParseACLPolicy(namespace.RootNamespace, dupAttrPolicy)
+	require.NoError(t, err)
+	// check that "list" and "read" get concatenated
+	require.Len(t, policy.Paths[len(policy.Paths)-1].Capabilities, 2)
 	policy.Templated = true
 	require.NoError(t, err)
 	ctx := namespace.RootContext(context.Background())
@@ -480,4 +485,96 @@ path "foo" {
 	require.NotNil(t, p)
 	require.NoError(t, err)
 	require.Contains(t, logOut.String(), "HCL policy contains duplicate attributes, which will no longer be supported in a future version")
+
+	t.Setenv(random.AllowHclDuplicatesEnvVar, "false")
+	_, err = ps.ACL(ctx, nil, map[string][]string{namespace.RootNamespace.ID: {"dev", "ops"}})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "error parsing templated policy \"dev\": failed to parse policy: The argument \"capabilities\" at 61:2 was already set. Each argument can only be defined once")
+	ps.tokenPoliciesLRU.Purge()
+	_, err = ps.GetPolicy(ctx, "dev", PolicyTypeACL)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to parse policy: failed to parse policy: The argument \"capabilities\" at 61:2 was already set. Each argument can only be defined once")
+}
+
+// TestPolicyStore_AllowedParametersWarning tests that a warning is logged when a policy containing
+// allowed_parameters or denied_parameters is set in the policy store.
+// TODO (DENIED_PARAMETERS_CHANGE): Remove this test after deprecation is done
+func TestPolicyStore_AllowedParametersWarning(t *testing.T) {
+	tests := []struct {
+		name           string
+		policyFragment string
+		expectLog      bool
+	}{
+		{
+			name: "allowed_parameters",
+			policyFragment: `
+path "foo" {
+ allowed_parameters = {
+  "param1" = ["val1", "val2"]
+ }
+ capabilities = ["read"]
+}
+`,
+			expectLog: true,
+		},
+		{
+			name: "denied_parameters",
+			policyFragment: `
+path "foo" {
+ denied_parameters = {
+  "param1" = ["val1", "val2"]
+ }
+ capabilities = ["read"]
+}
+`,
+			expectLog: true,
+		},
+		{
+			name: "no_parameters",
+			policyFragment: `
+path "foo" {
+ capabilities = ["read"]
+}
+`,
+			expectLog: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			logOut := new(bytes.Buffer)
+			conf := &CoreConfig{
+				Logger: log.New(&log.LoggerOptions{
+					Mutex:  &sync.Mutex{},
+					Level:  log.Warn,
+					Output: logOut,
+				}),
+			}
+			core, _, _ := TestCoreUnsealedWithConfig(t, conf)
+			ps := core.policyStore
+
+			// First policy
+			policy := aclPolicy + tc.policyFragment
+			parsedPolicy, err := ParseACLPolicy(namespace.RootNamespace, policy)
+			require.NoError(t, err)
+
+			ctx := namespace.RootContext(context.Background())
+			err = ps.SetPolicy(ctx, parsedPolicy)
+			require.NoError(t, err)
+
+			if tc.expectLog {
+				require.Contains(t, logOut.String(), "you're using 'allowed_parameters' or 'denied_parameters' in one or more policies")
+			} else {
+				require.NotContains(t, logOut.String(), "you're using 'allowed_parameters' or 'denied_parameters' in one or more policies")
+			}
+
+			// Reset log output and add a second policy
+			logOut.Reset()
+			err = ps.SetPolicy(ctx, parsedPolicy)
+			require.NoError(t, err)
+
+			// Ensure no additional log is generated for the second policy
+			require.NotContains(t, logOut.String(), "you're using 'allowed_parameters' or 'denied_parameters' in one or more policies")
+		})
+	}
 }

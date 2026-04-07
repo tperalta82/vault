@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -105,7 +105,7 @@ module('Integration | Component | pki-generate-csr', function (hooks) {
       .dom(GENERAL.validationErrorByAttr('type'))
       .hasText('Type is required.', 'Type validation error renders');
     assert
-      .dom('[data-test-field="commonName"] [data-test-inline-alert]')
+      .dom(GENERAL.validationErrorByAttr('commonName'))
       .hasText('Common name is required.', 'Common name validation error renders');
     assert.dom('[data-test-alert]').hasText('There are 2 errors with this form.', 'Alert renders');
 

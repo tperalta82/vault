@@ -4,11 +4,14 @@ package quotas
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _LeaseActionName = "unknownloadedcreateddeletedallow"
 
 var _LeaseActionIndex = [...]uint8{0, 7, 13, 20, 27, 32}
+
+const _LeaseActionLowerName = "unknownloadedcreateddeletedallow"
 
 func (i LeaseAction) String() string {
 	if i >= LeaseAction(len(_LeaseActionIndex)-1) {
@@ -17,14 +20,38 @@ func (i LeaseAction) String() string {
 	return _LeaseActionName[_LeaseActionIndex[i]:_LeaseActionIndex[i+1]]
 }
 
-var _LeaseActionValues = []LeaseAction{0, 1, 2, 3, 4}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _LeaseActionNoOp() {
+	var x [1]struct{}
+	_ = x[LeaseActionUnknown-(0)]
+	_ = x[LeaseActionLoaded-(1)]
+	_ = x[LeaseActionCreated-(2)]
+	_ = x[LeaseActionDeleted-(3)]
+	_ = x[LeaseActionAllow-(4)]
+}
+
+var _LeaseActionValues = []LeaseAction{LeaseActionUnknown, LeaseActionLoaded, LeaseActionCreated, LeaseActionDeleted, LeaseActionAllow}
 
 var _LeaseActionNameToValueMap = map[string]LeaseAction{
-	_LeaseActionName[0:7]:   0,
-	_LeaseActionName[7:13]:  1,
-	_LeaseActionName[13:20]: 2,
-	_LeaseActionName[20:27]: 3,
-	_LeaseActionName[27:32]: 4,
+	_LeaseActionName[0:7]:        LeaseActionUnknown,
+	_LeaseActionLowerName[0:7]:   LeaseActionUnknown,
+	_LeaseActionName[7:13]:       LeaseActionLoaded,
+	_LeaseActionLowerName[7:13]:  LeaseActionLoaded,
+	_LeaseActionName[13:20]:      LeaseActionCreated,
+	_LeaseActionLowerName[13:20]: LeaseActionCreated,
+	_LeaseActionName[20:27]:      LeaseActionDeleted,
+	_LeaseActionLowerName[20:27]: LeaseActionDeleted,
+	_LeaseActionName[27:32]:      LeaseActionAllow,
+	_LeaseActionLowerName[27:32]: LeaseActionAllow,
+}
+
+var _LeaseActionNames = []string{
+	_LeaseActionName[0:7],
+	_LeaseActionName[7:13],
+	_LeaseActionName[13:20],
+	_LeaseActionName[20:27],
+	_LeaseActionName[27:32],
 }
 
 // LeaseActionString retrieves an enum value from the enum constants string name.
@@ -33,12 +60,23 @@ func LeaseActionString(s string) (LeaseAction, error) {
 	if val, ok := _LeaseActionNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _LeaseActionNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to LeaseAction values", s)
 }
 
 // LeaseActionValues returns all values of the enum
 func LeaseActionValues() []LeaseAction {
 	return _LeaseActionValues
+}
+
+// LeaseActionStrings returns a slice of all String values of the enum
+func LeaseActionStrings() []string {
+	strs := make([]string, len(_LeaseActionNames))
+	copy(strs, _LeaseActionNames)
+	return strs
 }
 
 // IsALeaseAction returns "true" if the value is listed in the enum definition. "false" otherwise

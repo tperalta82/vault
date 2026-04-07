@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -58,14 +58,10 @@ export const PAGE = {
   list: {
     createSecret: '[data-test-toolbar-create-secret]',
     item: (secret) => (!secret ? '[data-test-list-item]' : `[data-test-list-item="${secret}"]`),
+    menuItem: (label) => `[data-test-list-menu-item="${label}"]`,
     filter: `[data-test-kv-list-filter]`,
-    listMenuDelete: `[data-test-popup-metadata-delete]`,
     overviewCard: '[data-test-overview-card-container="View secret"]',
     overviewInput: '[data-test-view-secret] input',
-    pagination: '[data-test-pagination]',
-    paginationInfo: '.hds-pagination-info',
-    paginationNext: '.hds-pagination-nav__arrow--direction-next',
-    paginationSelected: '.hds-pagination-nav__number--is-selected',
   },
   versions: {
     icon: (version) => `[data-test-icon-holder="${version}"]`,
@@ -117,6 +113,7 @@ export const FORM = {
   inlineAlert: '[data-test-inline-alert]',
   validation: (attr) => `[data-test-field="${attr}"] [data-test-inline-alert]`,
   messageError: '[data-test-message-error]',
+  validationError: (attr) => `[data-test-validation-error="${attr}"]`,
   validationWarning: '[data-test-validation-warning]',
   invalidFormAlert: '[data-test-invalid-form-alert]',
   versionAlert: '[data-test-secret-version-alert]',

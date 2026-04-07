@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -10,9 +10,6 @@ module.exports = {
 
   rules: {
     'no-action': 'off',
-    'no-implicit-this': {
-      allow: ['supported-auth-backends'],
-    },
     'require-input-label': 'off',
     'no-array-prototype-extensions': 'off',
     // from bump to ember-template-lint@6.0.0

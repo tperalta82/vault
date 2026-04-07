@@ -1,17 +1,18 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
 import { AUTH_FORM } from 'vault/tests/helpers/auth/auth-form-selectors';
 import { click, fillIn, waitFor } from '@ember/test-helpers';
-import { fillInLoginFields, SYS_INTERNAL_UI_MOUNTS } from 'vault/tests/helpers/auth/auth-helpers';
+import { fillInLoginFields, formatAuthMounts } from 'vault/tests/helpers/auth/auth-helpers';
 import { GENERAL } from 'vault/tests/helpers/general-selectors';
 import { module, test } from 'qunit';
 import { setupMirage } from 'ember-cli-mirage/test-support';
 import { setupRenderingTest } from 'ember-qunit';
 import { setupTotpMfaResponse } from 'vault/tests/helpers/mfa/mfa-helpers';
 import setupTestContext from './setup-test-context';
+import sinon from 'sinon';
 
 module('Integration | Component | auth | page | listing visibility', function (hooks) {
   setupRenderingTest(hooks);
@@ -19,7 +20,14 @@ module('Integration | Component | auth | page | listing visibility', function (h
 
   hooks.beforeEach(function () {
     setupTestContext(this);
-    this.visibleAuthMounts = SYS_INTERNAL_UI_MOUNTS;
+    this.api = this.owner.lookup('service:api');
+    this.visibleAuthMounts = formatAuthMounts(this.api);
+    // extra setup for when the "oidc" is selected and the oidc-jwt component renders
+    this.routerStub = sinon.stub(this.owner.lookup('service:router'), 'urlFor').returns('123-example.com');
+  });
+
+  hooks.afterEach(function () {
+    this.routerStub.restore();
   });
 
   test('it formats and renders tabs if visible auth mounts exist', async function (assert) {
@@ -70,6 +78,17 @@ module('Integration | Component | auth | page | listing visibility', function (h
       .exists('"Sign in with other methods" renders again');
   });
 
+  test('it renders tabs for types prefixed with "ns_"', async function (assert) {
+    this.visibleAuthMounts = formatAuthMounts(this.api, { 'token/': { type: 'ns_token' } });
+    await this.renderComponent();
+    assert.dom(GENERAL.selectByAttr('auth type')).doesNotExist('dropdown does not render');
+    assert.dom(AUTH_FORM.tabs).exists({ count: 1 }, 'it renders 1 tab');
+    assert.dom(AUTH_FORM.tabBtn('token')).exists(`token renders as a tab`);
+    assert
+      .dom(AUTH_FORM.tabBtn('token'))
+      .hasAttribute('aria-selected', 'true', 'it selects the first type by default');
+  });
+
   // integration tests for ?with= query param
   module('with a direct link', function (hooks) {
     hooks.beforeEach(function () {
@@ -113,10 +132,24 @@ module('Integration | Component | auth | page | listing visibility', function (h
       assert.dom(GENERAL.backButton).doesNotExist();
     });
 
+    test('it treats direct link as only mount when multiple mounts are tuned with listing_visibility="unauth"', async function (assert) {
+      this.directLinkData = { path: 'userpass2/', type: 'userpass' };
+      await this.renderComponent();
+      assert.dom(AUTH_FORM.authForm('userpass')).exists;
+      assert.dom(AUTH_FORM.tabBtn('userpass')).hasText('Userpass', 'it renders tab for type');
+      assert.dom(AUTH_FORM.tabs).exists({ count: 1 }, 'only one tab renders');
+      assert.dom(GENERAL.inputByAttr('path')).hasAttribute('type', 'hidden');
+      assert.dom(GENERAL.inputByAttr('path')).hasValue('userpass2/');
+      assert.dom(GENERAL.button('Sign in with other methods')).exists('"Sign in with other methods" renders');
+      assert.dom(GENERAL.selectByAttr('auth type')).doesNotExist();
+      assert.dom(AUTH_FORM.advancedSettings).doesNotExist();
+      assert.dom(GENERAL.backButton).doesNotExist();
+    });
+
     test('it prioritizes auth type from canceled mfa instead of direct link for path', async function (assert) {
       assert.expect(1);
-      this.directLinkData = this.directLinkIsVisibleMount;
-      const authType = 'okta';
+      this.directLinkData = this.directLinkIsVisibleMount; // type is "oidc"
+      const authType = 'okta'; // set to a type that differs from direct link
       this.server.post(`/auth/okta/login/matilda`, () => setupTotpMfaResponse(authType));
       await this.renderComponent();
       await click(GENERAL.button('Sign in with other methods'));
@@ -124,20 +157,21 @@ module('Integration | Component | auth | page | listing visibility', function (h
       await fillInLoginFields({ username: 'matilda', password: 'password' });
       await click(GENERAL.submitButton);
       await waitFor('[data-test-mfa-description]'); // wait until MFA validation renders
-      await click(GENERAL.backButton);
+      await click(GENERAL.cancelButton);
       assert.dom(AUTH_FORM.selectMethod).hasValue(authType, 'Okta is selected in dropdown');
     });
 
     test('it prioritizes auth type from canceled mfa instead of direct link with type', async function (assert) {
       assert.expect(1);
-      this.directLinkData = this.directLinkIsJustType;
-      const authType = 'userpass';
-      this.server.post(`/auth/okta/login/matilda`, () => setupTotpMfaResponse(authType));
+      this.directLinkData = this.directLinkIsJustType; // type is "okta"
+      const authType = 'userpass'; // set to a type that differs from direct link
+      this.server.post(`/auth/userpass/login/matilda`, () => setupTotpMfaResponse(authType));
       await this.renderComponent();
       await fillIn(AUTH_FORM.selectMethod, authType);
       await fillInLoginFields({ username: 'matilda', password: 'password' });
       await click(GENERAL.submitButton);
-      await click(GENERAL.backButton);
+      await waitFor('[data-test-mfa-description]'); // wait until MFA validation renders
+      await click(GENERAL.cancelButton);
       assert.dom(AUTH_FORM.tabBtn('userpass')).hasAttribute('aria-selected', 'true');
     });
   });

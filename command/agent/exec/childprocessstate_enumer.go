@@ -4,11 +4,14 @@ package exec
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _childProcessStateName = "NotStartedRunningRestartingStopped"
 
 var _childProcessStateIndex = [...]uint8{0, 10, 17, 27, 34}
+
+const _childProcessStateLowerName = "notstartedrunningrestartingstopped"
 
 func (i childProcessState) String() string {
 	if i >= childProcessState(len(_childProcessStateIndex)-1) {
@@ -17,13 +20,34 @@ func (i childProcessState) String() string {
 	return _childProcessStateName[_childProcessStateIndex[i]:_childProcessStateIndex[i+1]]
 }
 
-var _childProcessStateValues = []childProcessState{0, 1, 2, 3}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _childProcessStateNoOp() {
+	var x [1]struct{}
+	_ = x[childProcessStateNotStarted-(0)]
+	_ = x[childProcessStateRunning-(1)]
+	_ = x[childProcessStateRestarting-(2)]
+	_ = x[childProcessStateStopped-(3)]
+}
+
+var _childProcessStateValues = []childProcessState{childProcessStateNotStarted, childProcessStateRunning, childProcessStateRestarting, childProcessStateStopped}
 
 var _childProcessStateNameToValueMap = map[string]childProcessState{
-	_childProcessStateName[0:10]:  0,
-	_childProcessStateName[10:17]: 1,
-	_childProcessStateName[17:27]: 2,
-	_childProcessStateName[27:34]: 3,
+	_childProcessStateName[0:10]:       childProcessStateNotStarted,
+	_childProcessStateLowerName[0:10]:  childProcessStateNotStarted,
+	_childProcessStateName[10:17]:      childProcessStateRunning,
+	_childProcessStateLowerName[10:17]: childProcessStateRunning,
+	_childProcessStateName[17:27]:      childProcessStateRestarting,
+	_childProcessStateLowerName[17:27]: childProcessStateRestarting,
+	_childProcessStateName[27:34]:      childProcessStateStopped,
+	_childProcessStateLowerName[27:34]: childProcessStateStopped,
+}
+
+var _childProcessStateNames = []string{
+	_childProcessStateName[0:10],
+	_childProcessStateName[10:17],
+	_childProcessStateName[17:27],
+	_childProcessStateName[27:34],
 }
 
 // childProcessStateString retrieves an enum value from the enum constants string name.
@@ -32,12 +56,23 @@ func childProcessStateString(s string) (childProcessState, error) {
 	if val, ok := _childProcessStateNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _childProcessStateNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to childProcessState values", s)
 }
 
 // childProcessStateValues returns all values of the enum
 func childProcessStateValues() []childProcessState {
 	return _childProcessStateValues
+}
+
+// childProcessStateStrings returns a slice of all String values of the enum
+func childProcessStateStrings() []string {
+	strs := make([]string, len(_childProcessStateNames))
+	copy(strs, _childProcessStateNames)
+	return strs
 }
 
 // IsAchildProcessState returns "true" if the value is listed in the enum definition. "false" otherwise

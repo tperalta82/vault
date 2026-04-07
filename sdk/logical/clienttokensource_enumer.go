@@ -4,11 +4,14 @@ package logical
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _ClientTokenSourceName = "no_client_tokenvault_headerauthz_headerinternal_auth"
 
 var _ClientTokenSourceIndex = [...]uint8{0, 15, 27, 39, 52}
+
+const _ClientTokenSourceLowerName = "no_client_tokenvault_headerauthz_headerinternal_auth"
 
 func (i ClientTokenSource) String() string {
 	if i >= ClientTokenSource(len(_ClientTokenSourceIndex)-1) {
@@ -17,13 +20,34 @@ func (i ClientTokenSource) String() string {
 	return _ClientTokenSourceName[_ClientTokenSourceIndex[i]:_ClientTokenSourceIndex[i+1]]
 }
 
-var _ClientTokenSourceValues = []ClientTokenSource{0, 1, 2, 3}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _ClientTokenSourceNoOp() {
+	var x [1]struct{}
+	_ = x[NoClientToken-(0)]
+	_ = x[ClientTokenFromVaultHeader-(1)]
+	_ = x[ClientTokenFromAuthzHeader-(2)]
+	_ = x[ClientTokenFromInternalAuth-(3)]
+}
+
+var _ClientTokenSourceValues = []ClientTokenSource{NoClientToken, ClientTokenFromVaultHeader, ClientTokenFromAuthzHeader, ClientTokenFromInternalAuth}
 
 var _ClientTokenSourceNameToValueMap = map[string]ClientTokenSource{
-	_ClientTokenSourceName[0:15]:  0,
-	_ClientTokenSourceName[15:27]: 1,
-	_ClientTokenSourceName[27:39]: 2,
-	_ClientTokenSourceName[39:52]: 3,
+	_ClientTokenSourceName[0:15]:       NoClientToken,
+	_ClientTokenSourceLowerName[0:15]:  NoClientToken,
+	_ClientTokenSourceName[15:27]:      ClientTokenFromVaultHeader,
+	_ClientTokenSourceLowerName[15:27]: ClientTokenFromVaultHeader,
+	_ClientTokenSourceName[27:39]:      ClientTokenFromAuthzHeader,
+	_ClientTokenSourceLowerName[27:39]: ClientTokenFromAuthzHeader,
+	_ClientTokenSourceName[39:52]:      ClientTokenFromInternalAuth,
+	_ClientTokenSourceLowerName[39:52]: ClientTokenFromInternalAuth,
+}
+
+var _ClientTokenSourceNames = []string{
+	_ClientTokenSourceName[0:15],
+	_ClientTokenSourceName[15:27],
+	_ClientTokenSourceName[27:39],
+	_ClientTokenSourceName[39:52],
 }
 
 // ClientTokenSourceString retrieves an enum value from the enum constants string name.
@@ -32,12 +56,23 @@ func ClientTokenSourceString(s string) (ClientTokenSource, error) {
 	if val, ok := _ClientTokenSourceNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _ClientTokenSourceNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to ClientTokenSource values", s)
 }
 
 // ClientTokenSourceValues returns all values of the enum
 func ClientTokenSourceValues() []ClientTokenSource {
 	return _ClientTokenSourceValues
+}
+
+// ClientTokenSourceStrings returns a slice of all String values of the enum
+func ClientTokenSourceStrings() []string {
+	strs := make([]string, len(_ClientTokenSourceNames))
+	copy(strs, _ClientTokenSourceNames)
+	return strs
 }
 
 // IsAClientTokenSource returns "true" if the value is listed in the enum definition. "false" otherwise

@@ -1,10 +1,11 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package vault
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"time"
 
@@ -321,7 +322,11 @@ func (d dynamicSystemView) GeneratePasswordFromPolicy(ctx context.Context, polic
 		return "", fmt.Errorf("stored password policy is invalid: %w", err)
 	}
 
-	return passPolicy.Generate(ctx, nil)
+	rng, err := d.core.GetConfigurableRNG(policyCfg.EntropySource, rand.Reader)
+	if err != nil {
+		return "", fmt.Errorf("stored password policy is invalid: %w", err)
+	}
+	return passPolicy.Generate(ctx, rng)
 }
 
 func (d dynamicSystemView) ClusterID(ctx context.Context) (string, error) {
@@ -353,6 +358,17 @@ func (d dynamicSystemView) GenerateIdentityToken(ctx context.Context, req *plugi
 		Token: pluginutil.IdentityToken(token),
 		TTL:   ttl,
 	}, nil
+}
+
+func (d dynamicSystemView) GetRotationInformation(ctx context.Context, req *rotation.RotationInfoRequest) (*rotation.RotationInfoResponse, error) {
+	// sanity check
+	mountEntry := d.mountEntry
+	if mountEntry == nil {
+		return nil, fmt.Errorf("no mount entry")
+	}
+	nsCtx := namespace.ContextWithNamespace(ctx, mountEntry.Namespace())
+
+	return d.core.GetRotationInformation(nsCtx, mountEntry.APIPath(), req)
 }
 
 func (d dynamicSystemView) RegisterRotationJob(ctx context.Context, req *rotation.RotationJobConfigureRequest) (string, error) {

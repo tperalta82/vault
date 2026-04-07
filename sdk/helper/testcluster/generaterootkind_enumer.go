@@ -4,11 +4,14 @@ package testcluster
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _GenerateRootKindName = "RegularDRGenerateRecovery"
 
 var _GenerateRootKindIndex = [...]uint8{0, 7, 9, 25}
+
+const _GenerateRootKindLowerName = "regulardrgeneraterecovery"
 
 func (i GenerateRootKind) String() string {
 	if i < 0 || i >= GenerateRootKind(len(_GenerateRootKindIndex)-1) {
@@ -17,12 +20,30 @@ func (i GenerateRootKind) String() string {
 	return _GenerateRootKindName[_GenerateRootKindIndex[i]:_GenerateRootKindIndex[i+1]]
 }
 
-var _GenerateRootKindValues = []GenerateRootKind{0, 1, 2}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _GenerateRootKindNoOp() {
+	var x [1]struct{}
+	_ = x[GenerateRootRegular-(0)]
+	_ = x[GenerateRootDR-(1)]
+	_ = x[GenerateRecovery-(2)]
+}
+
+var _GenerateRootKindValues = []GenerateRootKind{GenerateRootRegular, GenerateRootDR, GenerateRecovery}
 
 var _GenerateRootKindNameToValueMap = map[string]GenerateRootKind{
-	_GenerateRootKindName[0:7]:  0,
-	_GenerateRootKindName[7:9]:  1,
-	_GenerateRootKindName[9:25]: 2,
+	_GenerateRootKindName[0:7]:       GenerateRootRegular,
+	_GenerateRootKindLowerName[0:7]:  GenerateRootRegular,
+	_GenerateRootKindName[7:9]:       GenerateRootDR,
+	_GenerateRootKindLowerName[7:9]:  GenerateRootDR,
+	_GenerateRootKindName[9:25]:      GenerateRecovery,
+	_GenerateRootKindLowerName[9:25]: GenerateRecovery,
+}
+
+var _GenerateRootKindNames = []string{
+	_GenerateRootKindName[0:7],
+	_GenerateRootKindName[7:9],
+	_GenerateRootKindName[9:25],
 }
 
 // GenerateRootKindString retrieves an enum value from the enum constants string name.
@@ -31,12 +52,23 @@ func GenerateRootKindString(s string) (GenerateRootKind, error) {
 	if val, ok := _GenerateRootKindNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _GenerateRootKindNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to GenerateRootKind values", s)
 }
 
 // GenerateRootKindValues returns all values of the enum
 func GenerateRootKindValues() []GenerateRootKind {
 	return _GenerateRootKindValues
+}
+
+// GenerateRootKindStrings returns a slice of all String values of the enum
+func GenerateRootKindStrings() []string {
+	strs := make([]string, len(_GenerateRootKindNames))
+	copy(strs, _GenerateRootKindNames)
+	return strs
 }
 
 // IsAGenerateRootKind returns "true" if the value is listed in the enum definition. "false" otherwise

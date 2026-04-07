@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package ldap
@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -515,6 +516,55 @@ func TestBackend_LoginRegression_AnonBind(t *testing.T) {
 	})
 }
 
+// TestBackend_Login_EmptyPasswordDisallowed ensures that logins with empty
+// passwords are disallowed
+func TestBackend_Login_EmptyPasswordDisallowed(t *testing.T) {
+	b, storage := createBackendWithStorage(t)
+	cleanup, cfg := ldap.PrepareTestContainer(t, ldap.DefaultVersion)
+	defer cleanup()
+
+	configReq := &logical.Request{
+		Operation: logical.UpdateOperation,
+		Path:      "config",
+		Data: map[string]interface{}{
+			"url":            cfg.Url,
+			"userattr":       cfg.UserAttr,
+			"userdn":         cfg.UserDN,
+			"groupdn":        cfg.GroupDN,
+			"groupattr":      cfg.GroupAttr,
+			"binddn":         cfg.BindDN,
+			"bindpassword":   cfg.BindPassword,
+			"deny_null_bind": false,
+		},
+		Storage: storage,
+	}
+	resp, err := b.HandleRequest(context.Background(), configReq)
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("err:%v resp:%#v", err, resp)
+	}
+
+	// password is empty
+	loginReq := &logical.Request{
+		Operation: logical.UpdateOperation,
+		Path:      "login/hermes conrad",
+		Data: map[string]interface{}{
+			"password": "",
+		},
+		Storage:    storage,
+		Connection: &logical.Connection{},
+	}
+
+	resp, err = b.HandleRequest(context.Background(), loginReq)
+	if err == nil {
+		t.Fatalf("expected error but got none, resp:%#v", resp)
+	}
+
+	expectedErr := "password cannot be of zero length when passwordless binds are being denied"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Fatalf("expected error to contain %q but got: %q", expectedErr, err.Error())
+	}
+}
+
 // TestBackend_LoginRegression_UserAttr is a test for the regression reported in
 // https://github.com/hashicorp/vault/issues/26171.
 // Vault relies on case insensitive user attribute keys for mapping user
@@ -948,6 +998,121 @@ func TestBackend_configDefaultsAfterUpdate(t *testing.T) {
 	})
 }
 
+// TestLdapAuthBackend_AliasLookaheadDefault will test the alias lookahead functionality
+// for the LDAP auth backend with a default configuration (i.e. case insensitive if the flag is
+// not set or is set to false).
+func TestLdapAuthBackend_AliasLookaheadDefault(t *testing.T) {
+	// create config and storage
+	b, storage := createBackendWithStorage(t)
+
+	// Create user "testuser"
+	resp, err := b.HandleRequest(namespace.RootContext(nil), &logical.Request{
+		Path:      "users/testuser",
+		Operation: logical.UpdateOperation,
+		Storage:   storage,
+		Data: map[string]interface{}{
+			"policies": []string{"default"},
+			"groups":   "testgroup,nested/testgroup",
+		},
+	})
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("bad: resp: %#v\nerr: %v", resp, err)
+	}
+
+	// List users
+	resp, err = b.HandleRequest(namespace.RootContext(nil), &logical.Request{
+		Path:      "users/",
+		Operation: logical.ListOperation,
+		Storage:   storage,
+	})
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("bad: resp: %#v\nerr: %v", resp, err)
+	}
+	expected := []string{"testuser"}
+	if !reflect.DeepEqual(expected, resp.Data["keys"].([]string)) {
+		t.Fatalf("bad: listed users; expected: %#v actual: %#v", expected, resp.Data["keys"].([]string))
+	}
+
+	resp, err = b.HandleRequest(context.Background(), &logical.Request{
+		Operation: logical.AliasLookaheadOperation,
+		Storage:   storage,
+		Path:      "login/testuser",
+		Data: map[string]interface{}{
+			"Raw": map[string]interface{}{
+				"username": "testuser",
+			},
+		},
+	})
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("bad: resp: %#v\nerr: %v", resp, err)
+	}
+	if resp.Auth.Alias.Name != "testuser" {
+		t.Fatalf("bad: alias lookahead did not return expected alias name; expected: 'testuser', actual: '%s'", resp.Auth.Alias.Name)
+	}
+}
+
+// TestLdapAuthBackend_AliasLookaheadCaseSensitive will test the alias lookahead functionality
+// for the LDAP auth backend when a case sensitive configuration flag is set
+func TestLdapAuthBackend_AliasLookaheadCaseSensitive(t *testing.T) {
+	// create config and storage
+	b, storage := createBackendWithStorage(t)
+
+	// make the backend case sensitive
+	resp, err := b.HandleRequest(namespace.RootContext(nil), &logical.Request{
+		Operation: logical.UpdateOperation,
+		Path:      "config",
+		Data: map[string]interface{}{
+			"case_sensitive_names": true,
+		},
+		Storage: storage,
+	})
+
+	// Create user "teSTuser"
+	resp, err = b.HandleRequest(namespace.RootContext(nil), &logical.Request{
+		Path:      "users/teSTuser",
+		Operation: logical.UpdateOperation,
+		Storage:   storage,
+		Data: map[string]interface{}{
+			"policies": []string{"default"},
+			"groups":   "testgroup,nested/testgroup",
+		},
+	})
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("bad: resp: %#v\nerr: %v", resp, err)
+	}
+
+	// List users
+	resp, err = b.HandleRequest(namespace.RootContext(nil), &logical.Request{
+		Path:      "users/",
+		Operation: logical.ListOperation,
+		Storage:   storage,
+	})
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("bad: resp: %#v\nerr: %v", resp, err)
+	}
+	expected := []string{"teSTuser"}
+	if !reflect.DeepEqual(expected, resp.Data["keys"].([]string)) {
+		t.Fatalf("bad: listed users; expected: %#v actual: %#v", expected, resp.Data["keys"].([]string))
+	}
+
+	resp, err = b.HandleRequest(context.Background(), &logical.Request{
+		Operation: logical.AliasLookaheadOperation,
+		Storage:   storage,
+		Path:      "login/teSTuser",
+		Data: map[string]interface{}{
+			"Raw": map[string]interface{}{
+				"username": "teSTuser",
+			},
+		},
+	})
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("bad: resp: %#v\nerr: %v", resp, err)
+	}
+	if resp.Auth.Alias.Name != "teSTuser" {
+		t.Fatalf("bad: alias lookahead did not return expected alias name; expected: 'teSTuser', actual: '%s'", resp.Auth.Alias.Name)
+	}
+}
+
 func testAccStepConfigUrl(t *testing.T, cfg *ldaputil.ConfigEntry) logicaltest.TestStep {
 	return logicaltest.TestStep{
 		Operation: logical.UpdateOperation,
@@ -1356,6 +1521,7 @@ func TestLdapAuthBackend_ConfigUpgrade(t *testing.T) {
 		TokenParams: tokenutil.TokenParams{
 			TokenPeriod:         5 * time.Minute,
 			TokenExplicitMaxTTL: 24 * time.Hour,
+			AliasMetadata:       make(map[string]string),
 		},
 		ConfigEntry: &ldaputil.ConfigEntry{
 			Url:                      cfg.Url,

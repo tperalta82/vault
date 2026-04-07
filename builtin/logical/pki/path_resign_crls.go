@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package pki
@@ -22,6 +22,7 @@ import (
 
 	"github.com/hashicorp/go-secure-stdlib/parseutil"
 	"github.com/hashicorp/vault/builtin/logical/pki/issuing"
+	"github.com/hashicorp/vault/builtin/logical/pki/observe"
 	"github.com/hashicorp/vault/builtin/logical/pki/pki_backend"
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/helper/certutil"
@@ -265,6 +266,11 @@ func (b *backend) pathUpdateResignCrlsHandler(ctx context.Context, request *logi
 	}
 
 	body := encodeResponse(crlBytes, format == "der")
+
+	b.pkiObserver.RecordPKIObservation(ctx, request, observe.ObservationTypePKIIssuerResignCRLs,
+		observe.NewAdditionalPKIMetadata("issuer_name", issuerRef),
+		observe.NewAdditionalPKIMetadata("signature_algorithm", caBundle.RevocationSigAlg),
+		observe.NewAdditionalPKIMetadata("number", big.NewInt(int64(crlNumber)).String()))
 
 	return &logical.Response{
 		Warnings: warnings,
@@ -655,7 +661,8 @@ func getCaBundle(sc *storageContext, issuerRef string) (*certutil.CAInfoBundle, 
 		return nil, fmt.Errorf("failed to resolve issuer %s: %w", issuerRefParam, err)
 	}
 
-	return sc.fetchCAInfoByIssuerId(issuerId, issuing.CRLSigningUsage)
+	caBundle, _, err := sc.fetchCAInfoByIssuerId(issuerId, issuing.CRLSigningUsage)
+	return caBundle, err
 }
 
 func decodePemCrls(rawCrls []string) ([]*x509.RevocationList, error) {

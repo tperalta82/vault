@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package vault
@@ -1053,25 +1053,26 @@ type TestListener struct {
 
 type TestClusterCore struct {
 	*Core
-	CoreConfig           *CoreConfig
-	Client               *api.Client
-	Handler              http.Handler
-	Address              *net.TCPAddr
-	Listeners            []*TestListener
-	ReloadFuncs          *map[string][]reloadutil.ReloadFunc
-	ReloadFuncsLock      *sync.RWMutex
-	Server               *http.Server
-	ServerCert           *x509.Certificate
-	ServerCertBytes      []byte
-	ServerCertPEM        []byte
-	ServerKey            *ecdsa.PrivateKey
-	ServerKeyPEM         []byte
-	tlsConfig            *tls.Config
-	UnderlyingStorage    physical.Backend
-	UnderlyingRawStorage physical.Backend
-	UnderlyingHAStorage  physical.HABackend
-	Barrier              SecurityBarrier
-	NodeID               string
+	CoreConfig              *CoreConfig
+	Client                  *api.Client
+	Handler                 http.Handler
+	Address                 *net.TCPAddr
+	Listeners               []*TestListener
+	ReloadFuncs             *map[string][]reloadutil.ReloadFunc
+	ReloadFuncsLock         *sync.RWMutex
+	Server                  *http.Server
+	ServerCert              *x509.Certificate
+	ServerCertBytes         []byte
+	ServerCertPEM           []byte
+	ServerKey               *ecdsa.PrivateKey
+	ServerKeyPEM            []byte
+	tlsConfig               *tls.Config
+	UnderlyingStorage       physical.Backend
+	UnderlyingRawStorage    physical.Backend
+	UnderlyingHAStorage     physical.HABackend
+	Barrier                 SecurityBarrier
+	NodeID                  string
+	pkiCertificateCountData struct{ ignoredIssuedCount, ignoredStoredCount uint64 }
 }
 
 type PhysicalBackendBundle struct {
@@ -1095,6 +1096,7 @@ type TestClusterOptions struct {
 	SkipInit                 bool
 	HandlerFunc              HandlerHandler
 	DefaultHandlerProperties HandlerProperties
+	ClusterHandlerProperties HandlerProperties
 
 	// BaseListenAddress is used to explicitly assign ports in sequence to the
 	// listener of each core.  It should be a string of the form
@@ -1209,7 +1211,7 @@ func NewTestCluster(t testing.TB, base *CoreConfig, opts *TestClusterOptions) *T
 	}
 
 	var numCores int
-	if opts == nil || opts.NumCores == 0 {
+	if opts.NumCores == 0 {
 		numCores = DefaultNumCores
 	} else {
 		numCores = opts.NumCores
@@ -1224,13 +1226,13 @@ func NewTestCluster(t testing.TB, base *CoreConfig, opts *TestClusterOptions) *T
 	var testCluster TestCluster
 
 	switch {
-	case opts != nil && opts.Logger != nil && !reflect.ValueOf(opts.Logger).IsNil():
+	case opts.Logger != nil && !reflect.ValueOf(opts.Logger).IsNil():
 		testCluster.Logger = opts.Logger
 	default:
 		testCluster.Logger = corehelpers.NewTestLogger(t)
 	}
 
-	if opts != nil && opts.TempDir != "" {
+	if opts.TempDir != "" {
 		if _, err := os.Stat(opts.TempDir); os.IsNotExist(err) {
 			if err := os.MkdirAll(opts.TempDir, 0o700); err != nil {
 				t.Fatal(err)
@@ -1246,7 +1248,7 @@ func NewTestCluster(t testing.TB, base *CoreConfig, opts *TestClusterOptions) *T
 	}
 
 	var caKey *ecdsa.PrivateKey
-	if opts != nil && opts.CAKey != nil {
+	if opts.CAKey != nil {
 		caKey = opts.CAKey
 	} else {
 		caKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -1256,7 +1258,7 @@ func NewTestCluster(t testing.TB, base *CoreConfig, opts *TestClusterOptions) *T
 	}
 	testCluster.CAKey = caKey
 	var caBytes []byte
-	if opts != nil && len(opts.CACert) > 0 {
+	if len(opts.CACert) > 0 {
 		caBytes = opts.CACert
 	} else {
 		caCertTemplate := &x509.Certificate{
@@ -1417,7 +1419,7 @@ func NewTestCluster(t testing.TB, base *CoreConfig, opts *TestClusterOptions) *T
 			NextProtos:     []string{"h2", "http/1.1"},
 			GetCertificate: certGetter.GetCertificate,
 		}
-		if opts != nil && opts.RequireClientAuth {
+		if opts.RequireClientAuth {
 			tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
 			testCluster.ClientAuthRequired = true
 		}
@@ -1493,6 +1495,7 @@ func NewTestCluster(t testing.TB, base *CoreConfig, opts *TestClusterOptions) *T
 		coreConfig.AdministrativeNamespacePath = base.AdministrativeNamespacePath
 		coreConfig.ServiceRegistration = base.ServiceRegistration
 		coreConfig.ImpreciseLeaseRoleTracking = base.ImpreciseLeaseRoleTracking
+		coreConfig.ReportingScanDirectory = base.ReportingScanDirectory
 
 		if base.BuiltinRegistry != nil {
 			coreConfig.BuiltinRegistry = base.BuiltinRegistry
@@ -1601,7 +1604,7 @@ func NewTestCluster(t testing.TB, base *CoreConfig, opts *TestClusterOptions) *T
 		testCluster.LicensePrivateKey = priKey
 	}
 
-	if opts != nil && opts.InmemClusterLayers {
+	if opts.InmemClusterLayers {
 		if opts.ClusterLayers != nil {
 			t.Fatalf("cannot specify ClusterLayers when InmemClusterLayers is true")
 		}
@@ -1612,7 +1615,7 @@ func NewTestCluster(t testing.TB, base *CoreConfig, opts *TestClusterOptions) *T
 		opts.ClusterLayers = inmemCluster
 	}
 
-	if opts != nil && len(opts.Plugins) != 0 {
+	if len(opts.Plugins) != 0 {
 		var plugins []pluginhelpers.TestPlugin
 		for _, pluginType := range opts.Plugins {
 			if pluginType.Container && runtime.GOOS != "linux" {
@@ -1692,7 +1695,7 @@ func NewTestCluster(t testing.TB, base *CoreConfig, opts *TestClusterOptions) *T
 	testCluster.Cores = ret
 
 	// Initialize cores
-	if opts == nil || !opts.SkipInit {
+	if !opts.SkipInit {
 		testCluster.initCores(t, opts)
 	}
 
@@ -1714,11 +1717,9 @@ func NewTestCluster(t testing.TB, base *CoreConfig, opts *TestClusterOptions) *T
 	}
 
 	// Setup
-	if opts != nil {
-		if opts.SetupFunc != nil {
-			testCluster.SetupFunc = func() {
-				opts.SetupFunc(t, &testCluster)
-			}
+	if opts.SetupFunc != nil {
+		testCluster.SetupFunc = func() {
+			opts.SetupFunc(t, &testCluster)
 		}
 	}
 

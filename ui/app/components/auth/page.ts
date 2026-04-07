@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -8,11 +8,14 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 
-import type { AuthResponse, AuthResponseWithMfa } from 'vault/vault/services/auth';
-import type { UnauthMountsByType, UnauthMountsResponse } from 'vault/vault/auth/form';
+import type { AuthSuccessResponse } from 'vault/vault/services/auth';
+import type AuthMethodResource from 'vault/resources/auth/method';
+import type { NormalizedAuthData, UnauthMountsByType } from 'vault/vault/auth/form';
 import type AuthService from 'vault/vault/services/auth';
 import type ClusterModel from 'vault/models/cluster';
 import type CspEventService from 'vault/services/csp-event';
+import type { MfaAuthData } from 'vault/vault/auth/mfa';
+import type { Task } from 'ember-concurrency';
 
 /**
  * @module AuthPage
@@ -55,26 +58,15 @@ import type CspEventService from 'vault/services/csp-event';
  *   🔀 Multiple visible mounts:
  *     ▸ Path dropdown is shown.
  *
- * @example
- * <Auth::Page
- *  @cluster={{this.model.clusterModel}}
- *  @directLinkData={{this.model.directLinkData}}
- *  @loginSettings={{this.model.loginSettings}}
- *  @namespaceQueryParam={{this.namespaceQueryParam}}
- *  @oidcProviderQueryParam={{this.oidcProvider}}
- *  @onAuthSuccess={{action "authSuccess"}}
- *  @onNamespaceUpdate={{perform this.updateNamespace}}
- *  @visibleAuthMounts={{this.model.visibleAuthMounts}}
- * />
  *
  * @param {object} cluster - the ember data cluster model. contains information such as cluster id, name and boolean for if the cluster is in standby
  * @param {object} directLinkData - mount data built from the "with" query param. If param is a mount path and maps to a visible mount, the login form defaults to this mount. Otherwise the form preselects the passed auth type.
  * @param {object} loginSettings - * enterprise only * login settings configured for the namespace. If set, specifies a default auth method type and/or backup method types
  * @param {string} namespaceQueryParam - namespace to login with, updated by typing in to the namespace input
  * @param {string} oidcProviderQueryParam - oidc provider query param, set in url as "?o=someprovider"
- * @param {function} onAuthSuccess - callback task in controller that receives the auth response (after MFA, if enabled) when login is successful
+ * @param {function} loginAndTransition - callback task in controller that receives the auth response (after MFA, if enabled) when login is successful
  * @param {function} onNamespaceUpdate - callback task that passes user input to the controller to update the login namespace in the url query params
- * @param {object} visibleAuthMounts - response from unauthenticated request to sys/internal/ui/mounts which returns mount paths tuned with `listing_visibility="unauth"`. keys are the mount path, values are mount data such as "type" or "description," if it exists
+ * @param {object} visibleAuthMounts - array of AuthMethodResources from unauthenticated request to sys/internal/ui/mounts which returns mount paths tuned with `listing_visibility="unauth"`
  * */
 
 export const CSP_ERROR =
@@ -83,15 +75,10 @@ export const CSP_ERROR =
 interface Args {
   cluster: ClusterModel;
   directLinkData: { type: string; path?: string } | null; // if "path" key is present then mount data is visible
+  loginAndTransition: Task<AuthSuccessResponse, [AuthSuccessResponse]>;
   loginSettings: { defaultType: string; backupTypes: string[] | null }; // enterprise only
-  onAuthSuccess: CallableFunction;
-  visibleAuthMounts: UnauthMountsResponse;
-}
-
-interface MfaAuthData {
-  mfa_requirement: object;
-  path: string;
-  selectedAuth: string;
+  roleQueryParam?: string;
+  visibleAuthMounts: AuthMethodResource[];
 }
 
 enum FormView {
@@ -105,7 +92,6 @@ export default class AuthPage extends Component<Args> {
 
   @tracked canceledMfaAuth = '';
   @tracked mfaAuthData: MfaAuthData | null = null;
-  @tracked mfaErrors = '';
 
   get cspError() {
     const isStandby = this.args.cluster.standby;
@@ -116,11 +102,10 @@ export default class AuthPage extends Component<Args> {
   get visibleMountsByType() {
     const visibleAuthMounts = this.args.visibleAuthMounts;
     if (visibleAuthMounts) {
-      const authMounts = visibleAuthMounts;
-      return Object.entries(authMounts).reduce((obj, [path, mountData]) => {
-        const { type } = mountData;
-        obj[type] ??= []; // if an array doesn't already exist for that type, create it
-        obj[type].push({ path, ...mountData });
+      return visibleAuthMounts.reduce((obj, authMount) => {
+        const { methodType } = authMount;
+        obj[methodType] ??= []; // if an array doesn't already exist for that methodType, create it
+        obj[methodType].push({ ...authMount });
         return obj;
       }, {} as UnauthMountsByType);
     }
@@ -165,10 +150,14 @@ export default class AuthPage extends Component<Args> {
   get directLinkViews() {
     const { directLinkData } = this.args;
 
-    // If "path" key exists we know the "with" query param references a mount with listing_visibility="unauth"
-    // Treat it as a preferred method and hide all other tabs.
+    // If "path" key exists then the "with" query param references a specific mount with listing_visibility="unauth".
+    // Show only this mount and hide any others for this auth type as well as any tabs for different auth types.
     if (directLinkData?.path) {
-      const tabData = this.filterVisibleMountsByType([directLinkData.type]);
+      const mounts = this.mountsByType(directLinkData.type);
+      const selectedMount = mounts?.find((m) => m.path === directLinkData?.path);
+      const tabData: UnauthMountsByType = {
+        [directLinkData.type]: selectedMount ? [selectedMount] : null,
+      };
       const defaultView = this.constructViews(FormView.TABS, tabData);
       const alternateView = this.constructViews(FormView.DROPDOWN, null);
 
@@ -233,43 +222,33 @@ export default class AuthPage extends Component<Args> {
     return { initialAuthType: this.initialAuthType, showAlternate };
   }
 
+  get formQueryParams() {
+    return { role: this.args.roleQueryParam };
+  }
+
   // ACTIONS
   @action
-  onAuthResponse(authResponse: AuthResponse | AuthResponseWithMfa, { selectedAuth = '', path = '' }) {
-    const mfa_requirement = 'mfa_requirement' in authResponse ? authResponse.mfa_requirement : undefined;
-    /*
-    Checking for an mfa_requirement happens in two places.
-    If doSubmit in <AuthForm> is called directly (by the <form> component) mfa is just handled here.
-  
-    Login methods submitted using a child form component of <AuthForm> are first checked for mfa 
-    in the Auth::LoginForm "authenticate" task, and then that data eventually bubbles up here.
-    */
-    if (mfa_requirement) {
+  async onAuthResponse(normalizedAuthData: NormalizedAuthData) {
+    const hasMfa = 'mfaRequirement' in normalizedAuthData ? normalizedAuthData.mfaRequirement : undefined;
+
+    if (hasMfa) {
       // if an mfa requirement exists further action is required
-      this.mfaAuthData = { mfa_requirement, selectedAuth, path };
+      const { authMethodType, authMountPath } = normalizedAuthData;
+      const parsedMfaResponse = this.auth.parseMfaResponse(hasMfa);
+      this.mfaAuthData = { mfaRequirement: parsedMfaResponse, authMethodType, authMountPath };
     } else {
-      // calls authSuccess in auth.js controller
-      this.args.onAuthSuccess(authResponse);
+      // Persist auth data in local storage
+      const resp = await this.auth.authSuccess(this.args.cluster.id, normalizedAuthData);
+      // calls loginAndTransition in auth.js controller
+      this.args.loginAndTransition.perform(resp);
     }
   }
 
   @action
   onCancelMfa() {
     // before resetting mfaAuthData, preserve auth type
-    this.canceledMfaAuth = this.mfaAuthData?.selectedAuth ?? '';
+    this.canceledMfaAuth = this.mfaAuthData?.authMethodType ?? '';
     this.mfaAuthData = null;
-  }
-
-  @action
-  onMfaSuccess(authResponse: AuthResponse) {
-    // calls authSuccess in auth.js controller
-    this.args.onAuthSuccess(authResponse);
-  }
-
-  @action
-  onMfaErrorDismiss() {
-    this.mfaAuthData = null;
-    this.mfaErrors = '';
   }
 
   // HELPERS
@@ -277,9 +256,14 @@ export default class AuthPage extends Component<Args> {
     const tabs: UnauthMountsByType = {};
     for (const type of authTypes) {
       // adds visible mounts for each type, if they exist
-      tabs[type] = this.visibleMountsByType?.[type] || null;
+      tabs[type] = this.mountsByType(type);
     }
     return tabs;
+  }
+
+  private mountsByType(type: string) {
+    // Return null and not an empty array to distinguish between "dropdown mode" and "tabs with no mounts" in downstream components
+    return this.visibleMountsByType?.[type] || null;
   }
 
   private constructViews(view: FormView, tabData: UnauthMountsByType | null) {

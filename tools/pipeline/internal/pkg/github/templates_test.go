@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package github
@@ -8,7 +8,7 @@ import (
 	"io"
 	"testing"
 
-	libgithub "github.com/google/go-github/v68/github"
+	libgithub "github.com/google/go-github/v83/github"
 	"github.com/stretchr/testify/require"
 )
 
@@ -158,6 +158,7 @@ func Test_renderEmbeddedTemplateToTmpFile_copyPRComment(t *testing.T) {
 			require.NoError(t, err)
 			defer file.Close()
 			bytes, err := io.ReadAll(file)
+			require.NoError(t, err)
 			require.NotEmpty(t, bytes)
 			for _, c := range test.coAuthoredByTrailers {
 				require.Contains(t, string(bytes), c)

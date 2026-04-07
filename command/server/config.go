@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package server
@@ -94,6 +94,9 @@ type Config struct {
 	DisableClustering    bool        `hcl:"-"`
 	DisableClusteringRaw interface{} `hcl:"disable_clustering,alias:DisableClustering"`
 
+	AllowAuditLogPrefixing    bool        `hcl:"-"`
+	AllowAuditLogPrefixingRaw interface{} `hcl:"allow_audit_log_prefixing,alias:AllowAuditLogPrefixing"`
+
 	DisablePerformanceStandby    bool        `hcl:"-"`
 	DisablePerformanceStandbyRaw interface{} `hcl:"disable_performance_standby,alias:DisablePerformanceStandby"`
 
@@ -127,6 +130,8 @@ type Config struct {
 
 	EnablePostUnsealTrace bool   `hcl:"enable_post_unseal_trace"`
 	PostUnsealTraceDir    string `hcl:"post_unseal_trace_directory"`
+
+	ReportingScanDirectory string `hcl:"reporting_scan_directory"`
 }
 
 const (
@@ -402,6 +407,11 @@ func (c *Config) Merge(c2 *Config) *Config {
 		result.DisablePerformanceStandby = c2.DisablePerformanceStandby
 	}
 
+	result.AllowAuditLogPrefixing = c.AllowAuditLogPrefixing
+	if c2.AllowAuditLogPrefixing {
+		result.AllowAuditLogPrefixing = c2.AllowAuditLogPrefixing
+	}
+
 	result.DisableSealWrap = c.DisableSealWrap
 	if c2.DisableSealWrap {
 		result.DisableSealWrap = c2.DisableSealWrap
@@ -439,8 +449,8 @@ func (c *Config) Merge(c2 *Config) *Config {
 		if c2.Observations.LedgerPath != "" {
 			result.Observations.LedgerPath = c2.Observations.LedgerPath
 		}
-		result.Observations.TypePrefixDenylist = append(c.Observations.TypePrefixDenylist, c2.Observations.TypePrefixDenylist...)
-		result.Observations.TypePrefixAllowlist = append(c.Observations.TypePrefixAllowlist, c2.Observations.TypePrefixAllowlist...)
+		result.Observations.TypePrefixDenylist = append(result.Observations.TypePrefixDenylist, c2.Observations.TypePrefixDenylist...)
+		result.Observations.TypePrefixAllowlist = append(result.Observations.TypePrefixAllowlist, c2.Observations.TypePrefixAllowlist...)
 		if c2.Observations.FileMode != "" {
 			result.Observations.FileMode = c2.Observations.FileMode
 		}
@@ -469,6 +479,11 @@ func (c *Config) Merge(c2 *Config) *Config {
 	result.PostUnsealTraceDir = c.PostUnsealTraceDir
 	if c2.PostUnsealTraceDir != "" {
 		result.PostUnsealTraceDir = c2.PostUnsealTraceDir
+	}
+
+	result.ReportingScanDirectory = c.ReportingScanDirectory
+	if c2.ReportingScanDirectory != "" {
+		result.ReportingScanDirectory = c2.ReportingScanDirectory
 	}
 
 	// Use values from top-level configuration for storage if set
@@ -645,6 +660,14 @@ func ParseConfigCheckDuplicate(d, source string) (cfg *Config, duplicate bool, e
 	// Parse!
 	obj, duplicate, err := random.ParseAndCheckForDuplicateHclAttributes(d)
 	if err != nil {
+		if strings.Contains(err.Error(), "was already set. Each argument can only be defined once") {
+			knownPossibleAttributeDupErrors := []string{"retry_join", "transform", "listener"}
+			for _, s := range knownPossibleAttributeDupErrors {
+				if strings.Contains(err.Error(), fmt.Sprintf("The argument %q at", s)) {
+					return nil, duplicate, fmt.Errorf("%w (if using the attribute syntax %s = [...], change it to the block syntax %s { ... })", err, s, s)
+				}
+			}
+		}
 		return nil, duplicate, err
 	}
 
@@ -748,6 +771,12 @@ func ParseConfigCheckDuplicate(d, source string) (cfg *Config, duplicate bool, e
 
 	if result.DisablePerformanceStandbyRaw != nil {
 		if result.DisablePerformanceStandby, err = parseutil.ParseBool(result.DisablePerformanceStandbyRaw); err != nil {
+			return nil, duplicate, err
+		}
+	}
+
+	if result.AllowAuditLogPrefixingRaw != nil {
+		if result.AllowAuditLogPrefixing, err = parseutil.ParseBool(result.AllowAuditLogPrefixingRaw); err != nil {
 			return nil, duplicate, err
 		}
 	}
@@ -1377,8 +1406,8 @@ func (c *Config) Sanitized() map[string]interface{} {
 
 		"disable_sealwrap": c.DisableSealWrap,
 
-		"disable_indexing": c.DisableIndexing,
-
+		"disable_indexing":                c.DisableIndexing,
+		"allow_audit_log_prefixing":       c.AllowAuditLogPrefixing,
 		"enable_response_header_hostname": c.EnableResponseHeaderHostname,
 
 		"enable_response_header_raft_node_id": c.EnableResponseHeaderRaftNodeID,

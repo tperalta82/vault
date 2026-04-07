@@ -4,11 +4,14 @@ package pki
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _DefaultDirectoryPolicyTypeName = "ForbidSignVerbatimRoleExternalPolicy"
 
 var _DefaultDirectoryPolicyTypeIndex = [...]uint8{0, 6, 18, 22, 36}
+
+const _DefaultDirectoryPolicyTypeLowerName = "forbidsignverbatimroleexternalpolicy"
 
 func (i DefaultDirectoryPolicyType) String() string {
 	if i < 0 || i >= DefaultDirectoryPolicyType(len(_DefaultDirectoryPolicyTypeIndex)-1) {
@@ -17,13 +20,34 @@ func (i DefaultDirectoryPolicyType) String() string {
 	return _DefaultDirectoryPolicyTypeName[_DefaultDirectoryPolicyTypeIndex[i]:_DefaultDirectoryPolicyTypeIndex[i+1]]
 }
 
-var _DefaultDirectoryPolicyTypeValues = []DefaultDirectoryPolicyType{0, 1, 2, 3}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _DefaultDirectoryPolicyTypeNoOp() {
+	var x [1]struct{}
+	_ = x[Forbid-(0)]
+	_ = x[SignVerbatim-(1)]
+	_ = x[Role-(2)]
+	_ = x[ExternalPolicy-(3)]
+}
+
+var _DefaultDirectoryPolicyTypeValues = []DefaultDirectoryPolicyType{Forbid, SignVerbatim, Role, ExternalPolicy}
 
 var _DefaultDirectoryPolicyTypeNameToValueMap = map[string]DefaultDirectoryPolicyType{
-	_DefaultDirectoryPolicyTypeName[0:6]:   0,
-	_DefaultDirectoryPolicyTypeName[6:18]:  1,
-	_DefaultDirectoryPolicyTypeName[18:22]: 2,
-	_DefaultDirectoryPolicyTypeName[22:36]: 3,
+	_DefaultDirectoryPolicyTypeName[0:6]:        Forbid,
+	_DefaultDirectoryPolicyTypeLowerName[0:6]:   Forbid,
+	_DefaultDirectoryPolicyTypeName[6:18]:       SignVerbatim,
+	_DefaultDirectoryPolicyTypeLowerName[6:18]:  SignVerbatim,
+	_DefaultDirectoryPolicyTypeName[18:22]:      Role,
+	_DefaultDirectoryPolicyTypeLowerName[18:22]: Role,
+	_DefaultDirectoryPolicyTypeName[22:36]:      ExternalPolicy,
+	_DefaultDirectoryPolicyTypeLowerName[22:36]: ExternalPolicy,
+}
+
+var _DefaultDirectoryPolicyTypeNames = []string{
+	_DefaultDirectoryPolicyTypeName[0:6],
+	_DefaultDirectoryPolicyTypeName[6:18],
+	_DefaultDirectoryPolicyTypeName[18:22],
+	_DefaultDirectoryPolicyTypeName[22:36],
 }
 
 // DefaultDirectoryPolicyTypeString retrieves an enum value from the enum constants string name.
@@ -32,12 +56,23 @@ func DefaultDirectoryPolicyTypeString(s string) (DefaultDirectoryPolicyType, err
 	if val, ok := _DefaultDirectoryPolicyTypeNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _DefaultDirectoryPolicyTypeNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to DefaultDirectoryPolicyType values", s)
 }
 
 // DefaultDirectoryPolicyTypeValues returns all values of the enum
 func DefaultDirectoryPolicyTypeValues() []DefaultDirectoryPolicyType {
 	return _DefaultDirectoryPolicyTypeValues
+}
+
+// DefaultDirectoryPolicyTypeStrings returns a slice of all String values of the enum
+func DefaultDirectoryPolicyTypeStrings() []string {
+	strs := make([]string, len(_DefaultDirectoryPolicyTypeNames))
+	copy(strs, _DefaultDirectoryPolicyTypeNames)
+	return strs
 }
 
 // IsADefaultDirectoryPolicyType returns "true" if the value is listed in the enum definition. "false" otherwise

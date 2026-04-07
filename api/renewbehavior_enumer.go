@@ -4,11 +4,14 @@ package api
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _RenewBehaviorName = "IgnoreErrorsRenewDisabledErrorOnErrors"
 
 var _RenewBehaviorIndex = [...]uint8{0, 12, 25, 38}
+
+const _RenewBehaviorLowerName = "ignoreerrorsrenewdisablederroronerrors"
 
 func (i RenewBehavior) String() string {
 	if i >= RenewBehavior(len(_RenewBehaviorIndex)-1) {
@@ -17,12 +20,30 @@ func (i RenewBehavior) String() string {
 	return _RenewBehaviorName[_RenewBehaviorIndex[i]:_RenewBehaviorIndex[i+1]]
 }
 
-var _RenewBehaviorValues = []RenewBehavior{0, 1, 2}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _RenewBehaviorNoOp() {
+	var x [1]struct{}
+	_ = x[RenewBehaviorIgnoreErrors-(0)]
+	_ = x[RenewBehaviorRenewDisabled-(1)]
+	_ = x[RenewBehaviorErrorOnErrors-(2)]
+}
+
+var _RenewBehaviorValues = []RenewBehavior{RenewBehaviorIgnoreErrors, RenewBehaviorRenewDisabled, RenewBehaviorErrorOnErrors}
 
 var _RenewBehaviorNameToValueMap = map[string]RenewBehavior{
-	_RenewBehaviorName[0:12]:  0,
-	_RenewBehaviorName[12:25]: 1,
-	_RenewBehaviorName[25:38]: 2,
+	_RenewBehaviorName[0:12]:       RenewBehaviorIgnoreErrors,
+	_RenewBehaviorLowerName[0:12]:  RenewBehaviorIgnoreErrors,
+	_RenewBehaviorName[12:25]:      RenewBehaviorRenewDisabled,
+	_RenewBehaviorLowerName[12:25]: RenewBehaviorRenewDisabled,
+	_RenewBehaviorName[25:38]:      RenewBehaviorErrorOnErrors,
+	_RenewBehaviorLowerName[25:38]: RenewBehaviorErrorOnErrors,
+}
+
+var _RenewBehaviorNames = []string{
+	_RenewBehaviorName[0:12],
+	_RenewBehaviorName[12:25],
+	_RenewBehaviorName[25:38],
 }
 
 // RenewBehaviorString retrieves an enum value from the enum constants string name.
@@ -31,12 +52,23 @@ func RenewBehaviorString(s string) (RenewBehavior, error) {
 	if val, ok := _RenewBehaviorNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _RenewBehaviorNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to RenewBehavior values", s)
 }
 
 // RenewBehaviorValues returns all values of the enum
 func RenewBehaviorValues() []RenewBehavior {
 	return _RenewBehaviorValues
+}
+
+// RenewBehaviorStrings returns a slice of all String values of the enum
+func RenewBehaviorStrings() []string {
+	strs := make([]string, len(_RenewBehaviorNames))
+	copy(strs, _RenewBehaviorNames)
+	return strs
 }
 
 // IsARenewBehavior returns "true" if the value is listed in the enum definition. "false" otherwise

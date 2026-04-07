@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package releases
@@ -6,45 +6,24 @@ package releases
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"maps"
-	"os"
-	"path/filepath"
 	"slices"
 
-	"github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/hcl/v2/hcldec"
-	"github.com/hashicorp/hcl/v2/hclparse"
+	libgitclient "github.com/hashicorp/vault/tools/pipeline/internal/pkg/git/client"
 	"github.com/jedib0t/go-pretty/v6/table"
-	slogctx "github.com/veqryn/slog-context"
-	"github.com/zclconf/go-cty/cty"
-	"github.com/zclconf/go-cty/cty/gocty"
-)
-
-type (
-	VersionsConfig struct {
-		Schema        int            `json:"schema" cty:"schema" hcl:"schema,optional"`
-		ActiveVersion *ActiveVersion `json:"active_versions" cty:"active_versions" hcl:"active_versions"`
-	}
-	ActiveVersion struct {
-		Versions map[string]*Version `json:"versions"`
-	}
-	Version struct {
-		CEActive bool `json:"ce_active"`
-		LTS      bool `json:"lts"`
-	}
 )
 
 // ListActiveVersionsReq is a request to list the active branch versions from the
 // .release/metadata file
 type ListActiveVersionsReq struct {
-	// ReleaseVersionConfigPath is the path to the .release/versions.hcl file
-	ReleaseVersionConfigPath string
-	// The depth to recursively search backwards for a .release/versions.hcl file
-	Recurse uint
+	// VersionsDecodeRes is the result of decoding .release/versions.hcl. If we
+	// auto-loaded it during our command initialization then we can return the
+	// contents.
+	VersionsDecodeRes *DecodeRes
+	// Write the active versions to $GITHUB_OUTPUT
+	WriteToGithubOutput bool
 }
 
 // ListActiveVersionsRes are the active versions and associated metadata for the repo
@@ -52,37 +31,17 @@ type ListActiveVersionsRes struct {
 	VersionsConfig *VersionsConfig `json:"versions_config,omitempty"`
 }
 
-var v1Schema = hcldec.ObjectSpec{
-	"schema": &hcldec.AttrSpec{
-		Name:     "schema",
-		Type:     cty.Number,
-		Required: false,
-	},
-	"active_versions": &hcldec.BlockSpec{
-		TypeName: "active_versions",
-		Nested: hcldec.ObjectSpec{
-			"version": &hcldec.BlockMapSpec{
-				TypeName:   "version",
-				LabelNames: []string{"name"},
-				Nested: hcldec.ObjectSpec{
-					"ce_active": &hcldec.AttrSpec{
-						Name:     "ce_active",
-						Type:     cty.Bool,
-						Required: false,
-					},
-					"lts": &hcldec.AttrSpec{
-						Name:     "lts",
-						Type:     cty.Bool,
-						Required: false,
-					},
-				},
-			},
-		},
-	},
+// ListActiveVersionsGithubOutput is our GITHUB_OUTPUT type. While ListActiveVersionsReq is designed to match the schema of the releases source file, this type
+// is designed for maximal utility in Github Actions workflows and their associated built-in functions.
+type ListActiveVersionsGithubOutput struct {
+	VersionsConfig   *VersionsConfig `json:"versions_config,omitempty"`
+	Versions         []string        `json:"versions,omitempty"`
+	CEActiveVersions []string        `json:"ce_active_versions,omitempty"`
+	LTSVersions      []string        `json:"lts_versions,omitempty"`
 }
 
 // Run runs the dynamic configuration request
-func (l *ListActiveVersionsReq) Run(ctx context.Context) (*ListActiveVersionsRes, error) {
+func (l *ListActiveVersionsReq) Run(ctx context.Context, git *libgitclient.Client) (*ListActiveVersionsRes, error) {
 	if l == nil {
 		return nil, fmt.Errorf("list active versions request is uninitialized")
 	}
@@ -93,31 +52,12 @@ func (l *ListActiveVersionsReq) Run(ctx context.Context) (*ListActiveVersionsRes
 	default:
 	}
 
-	var err error
-	res := &ListActiveVersionsRes{}
-
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("list active release versions: %w", err)
-		}
-	}()
-
 	slog.Default().DebugContext(ctx, "running list active versions request")
-
-	file, err := l.openReleaseVersions(ctx)
-	if err != nil {
+	if err := l.VersionsDecodeRes.Validate(ctx); err != nil {
 		return nil, err
 	}
 
-	var bytes []byte
-	bytes, err = io.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-
-	res.VersionsConfig, err = l.unmarshalConfig(ctx, bytes)
-
-	return res, err
+	return &ListActiveVersionsRes{VersionsConfig: l.VersionsDecodeRes.Config}, nil
 }
 
 // ToJSON marshals the response to JSON.
@@ -146,140 +86,32 @@ func (l *ListActiveVersionsRes) ToTable() string {
 	return t.Render()
 }
 
-// unmarshalConfig unmarshals the bytes of version.hcl into a *VersionsConfig
-func (l *ListActiveVersionsReq) unmarshalConfig(ctx context.Context, bytes []byte) (*VersionsConfig, error) {
-	var err error
-	slog.Default().DebugContext(ctx, "unmarshaling versions.hcl")
-
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("unmarhsal versions.hcl bytes: %w", err)
-		}
-	}()
-
-	parser := hclparse.NewParser()
-	var file *hcl.File
-	var diags hcl.Diagnostics
-	file, diags = parser.ParseHCL(bytes, "versions.hcl")
-	if diags != nil && diags.HasErrors() {
-		for _, diag := range diags {
-			err = errors.Join(err, errors.New(diag.Error()))
-		}
-
-		return nil, err
+// ToGithubOutput writes a JSON encoded versions of ListActiveVersionsRes to
+// $GITHUB_OUTPUT. We use an intermediate type to structure the data in a more
+// suitable fashion to make usage within Github Actions easier.
+func (r ListActiveVersionsRes) ToGithubOutput() ([]byte, error) {
+	res := &ListActiveVersionsGithubOutput{
+		VersionsConfig:   r.VersionsConfig,
+		Versions:         slices.Sorted(maps.Keys(r.VersionsConfig.ActiveVersion.Versions)),
+		CEActiveVersions: []string{},
+		LTSVersions:      []string{},
 	}
 
-	val, moreDiags := hcldec.Decode(file.Body, v1Schema, nil)
-	if moreDiags != nil && moreDiags.HasErrors() {
-		for _, diag := range moreDiags {
-			err = errors.Join(err, errors.New(diag.Error()))
+	for version, cfg := range r.VersionsConfig.ActiveVersion.Versions {
+		if cfg.CEActive {
+			res.CEActiveVersions = append(res.CEActiveVersions, version)
 		}
-		return nil, err
-	}
-
-	res := &VersionsConfig{ActiveVersion: &ActiveVersion{Versions: map[string]*Version{}}}
-	if !val.IsWhollyKnown() || !val.CanIterateElements() {
-		err = fmt.Errorf("unexpected version type: %s", val.Type().GoString())
-		return nil, err
-	}
-
-	schema, ok := val.AsValueMap()["schema"]
-	if ok && schema.IsWhollyKnown() && schema.Type().Equals(cty.Number) {
-		err = gocty.FromCtyValue(schema, &res.Schema)
-		if err != nil {
-			return nil, err
+		if cfg.LTS {
+			res.LTSVersions = append(res.LTSVersions, version)
 		}
 	}
+	slices.Sort(res.CEActiveVersions)
+	slices.Sort(res.LTSVersions)
 
-	av, ok := val.AsValueMap()["active_versions"]
-	if !ok {
-		err = errors.New("no active_versions stanza found in decoded value")
-	}
-
-	for _, versions := range av.AsValueSlice() {
-		for version, versionVal := range versions.AsValueMap() {
-			v := &Version{}
-
-			for attr, val := range versionVal.AsValueMap() {
-				switch attr {
-				case "ce_active":
-					v.CEActive = val.True()
-				case "lts":
-					v.LTS = val.True()
-				default:
-					err = fmt.Errorf("unknown value: %s", attr)
-					return nil, err
-				}
-			}
-
-			res.ActiveVersion.Versions[version] = v
-		}
-	}
-
-	return res, err
-}
-
-// openReleaseVersions searches the current path and optionally recursively for
-// .release/versions.hcl and returns a file handle to it.
-func (l *ListActiveVersionsReq) openReleaseVersions(ctx context.Context) (*os.File, error) {
-	var err error
-	var file *os.File
-	var path string
-
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("open release versions: %w", err)
-		}
-	}()
-
-	if l == nil {
-		err = errors.New("uninitialized")
-		return nil, err
-	}
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-
-	slog.Default().DebugContext(ctx, "open .release/versions.hcl")
-	if l.ReleaseVersionConfigPath != "" {
-		slog.Default().DebugContext(
-			slogctx.Append(ctx, slog.String("path", l.ReleaseVersionConfigPath)),
-			"attempting to open versions.hcl",
-		)
-
-		path, err = filepath.Abs(l.ReleaseVersionConfigPath)
-		if err != nil {
-			return nil, err
-		}
-
-		file, err = os.Open(path)
-		return file, err
-	}
-
-	path, err = os.Getwd()
+	b, err := json.Marshal(res)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshaling list active versions GITHUB_OUTPUT to JSON: %w", err)
 	}
 
-	for depth := uint(0); path != string(os.PathSeparator) && depth <= l.Recurse; depth++ {
-		path = filepath.Join(path, ".release", "versions.hcl")
-		slog.Default().DebugContext(
-			slogctx.Append(ctx, slog.String("path", path), slog.Uint64("recurse", uint64(depth))),
-			"attempting to open versions.hcl",
-		)
-		file, err = os.Open(path)
-		if err == nil {
-			return file, nil
-		}
-		path, err = filepath.Abs(filepath.Dir(filepath.Dir(filepath.Dir(path))))
-		if err != nil {
-			return nil, err
-		}
-	}
-	err = errors.New("unable to locate .release/versions.hcl")
-
-	return nil, err
+	return b, nil
 }

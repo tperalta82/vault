@@ -4,11 +4,14 @@ package logical
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _TokenTypeName = "defaultservicebatchdefault-servicedefault-batch"
 
 var _TokenTypeIndex = [...]uint8{0, 7, 14, 19, 34, 47}
+
+const _TokenTypeLowerName = "defaultservicebatchdefault-servicedefault-batch"
 
 func (i TokenType) String() string {
 	if i >= TokenType(len(_TokenTypeIndex)-1) {
@@ -17,14 +20,38 @@ func (i TokenType) String() string {
 	return _TokenTypeName[_TokenTypeIndex[i]:_TokenTypeIndex[i+1]]
 }
 
-var _TokenTypeValues = []TokenType{0, 1, 2, 3, 4}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _TokenTypeNoOp() {
+	var x [1]struct{}
+	_ = x[TokenTypeDefault-(0)]
+	_ = x[TokenTypeService-(1)]
+	_ = x[TokenTypeBatch-(2)]
+	_ = x[TokenTypeDefaultService-(3)]
+	_ = x[TokenTypeDefaultBatch-(4)]
+}
+
+var _TokenTypeValues = []TokenType{TokenTypeDefault, TokenTypeService, TokenTypeBatch, TokenTypeDefaultService, TokenTypeDefaultBatch}
 
 var _TokenTypeNameToValueMap = map[string]TokenType{
-	_TokenTypeName[0:7]:   0,
-	_TokenTypeName[7:14]:  1,
-	_TokenTypeName[14:19]: 2,
-	_TokenTypeName[19:34]: 3,
-	_TokenTypeName[34:47]: 4,
+	_TokenTypeName[0:7]:        TokenTypeDefault,
+	_TokenTypeLowerName[0:7]:   TokenTypeDefault,
+	_TokenTypeName[7:14]:       TokenTypeService,
+	_TokenTypeLowerName[7:14]:  TokenTypeService,
+	_TokenTypeName[14:19]:      TokenTypeBatch,
+	_TokenTypeLowerName[14:19]: TokenTypeBatch,
+	_TokenTypeName[19:34]:      TokenTypeDefaultService,
+	_TokenTypeLowerName[19:34]: TokenTypeDefaultService,
+	_TokenTypeName[34:47]:      TokenTypeDefaultBatch,
+	_TokenTypeLowerName[34:47]: TokenTypeDefaultBatch,
+}
+
+var _TokenTypeNames = []string{
+	_TokenTypeName[0:7],
+	_TokenTypeName[7:14],
+	_TokenTypeName[14:19],
+	_TokenTypeName[19:34],
+	_TokenTypeName[34:47],
 }
 
 // TokenTypeString retrieves an enum value from the enum constants string name.
@@ -33,12 +60,23 @@ func TokenTypeString(s string) (TokenType, error) {
 	if val, ok := _TokenTypeNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _TokenTypeNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to TokenType values", s)
 }
 
 // TokenTypeValues returns all values of the enum
 func TokenTypeValues() []TokenType {
 	return _TokenTypeValues
+}
+
+// TokenTypeStrings returns a slice of all String values of the enum
+func TokenTypeStrings() []string {
+	strs := make([]string, len(_TokenTypeNames))
+	copy(strs, _TokenTypeNames)
+	return strs
 }
 
 // IsATokenType returns "true" if the value is listed in the enum definition. "false" otherwise

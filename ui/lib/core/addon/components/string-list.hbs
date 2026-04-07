@@ -1,5 +1,5 @@
 {{!
-  Copyright (c) HashiCorp, Inc.
+  Copyright IBM Corp. 2016, 2025
   SPDX-License-Identifier: BUSL-1.1
 }}
 
@@ -19,7 +19,7 @@
       {{/if}}
     </label>
     {{#if @subText}}
-      <p class="sub-text">
+      <p class="sub-text" id={{concat (dasherize @label) "-helper-text"}}>
         {{@subText}}
       </p>
     {{/if}}
@@ -33,6 +33,7 @@
           @value={{data.value}}
           name={{concat this.elementId "-" index}}
           aria-label="{{@label}} list item {{index}}"
+          aria-describedby={{concat (dasherize @label) "-helper-text"}}
           {{on "keyup" (action "inputChanged" index)}}
           {{on "change" (action "inputChanged" index)}}
         />
@@ -53,14 +54,15 @@
         {{/if}}
       </div>
       {{#if (includes index this.indicesWithComma)}}
-        <Hds::Icon @name="alert-triangle" @color="var(--token-color-foreground-warning)" @size="24" @isInline={{true}} />
+        <Hds::Icon @name="alert-triangle" @color="warning" @size="24" @isInline={{true}} />
       {{/if}}
     </div>
   {{/each}}
   {{#if this.indicesWithComma}}
-    <Hds::Alert @type="inline" @color="warning" as |A|>
+    <Hds::Alert @type="inline" @color="warning" data-test-validation-warning={{@attrName}} as |A|>
       <A.Description>
-        Input contains a comma. Please separate values into individual rows.
+        Input contains a comma. To enter multiple values, use separate rows. If commas are part of your value, disregard this
+        message.
       </A.Description>
     </Hds::Alert>
   {{/if}}

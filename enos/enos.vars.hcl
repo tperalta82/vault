@@ -1,8 +1,5 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
-
-// artifactory_username is the username to use when testing an artifact stored in artfactory.
-// artifactory_username = "yourname@hashicorp.com"
 
 // artifactory_token is the token to use when authenticating to artifactory.
 // artifactory_token = "yourtoken"
@@ -37,20 +34,17 @@
 // resources.
 // project_name = "vault-enos-integration"
 
-// distro_version_amzn is the version of Amazon Linux 2 to use for "distro:amzn" variants
-// distro_version_amzn = "2"
-
-// distro_version_leap is the version of openSUSE Leap to use for "distro:leap" variants
-// distro_version_leap = "15.5"
+// distro_version_amzn is the version of Amazon Linux to use for "distro:amzn" variants
+// distro_version_amzn = "2023"
 
 // distro_version_rhel is the version of RHEL to use for "distro:rhel" variants.
-// distro_version_rhel = "9.3" // or "8.9"
+// distro_version_rhel = "10.1" // or "8.10" or "9.7"
 
 // distro_version_sles is the version of SUSE SLES to use for "distro:sles" variants.
-// distro_version_sles = "v15_sp5_standard"
+// distro_version_sles = "16.0" // or "15.7"
 
 // distro_version_ubuntu is the version of ubuntu to use for "distro:ubuntu" variants
-// distro_version_ubuntu = "22.04" // or "20.04"
+// distro_version_ubuntu = "22.04" // or "24.04"
 
 // tags are a map of tags that will be applied to infrastructure resources that
 // support tagging.

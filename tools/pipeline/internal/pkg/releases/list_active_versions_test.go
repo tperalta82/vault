@@ -1,10 +1,9 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package releases
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -34,8 +33,7 @@ active_versions {
 func TestListActiveVersionReq_unmarshalConfig(t *testing.T) {
 	t.Parallel()
 
-	req := &ListActiveVersionsReq{}
-	versionsConfig, err := req.unmarshalConfig(context.Background(), []byte(testVersionConfig))
+	versionsConfig, err := DecodeBytes([]byte(testVersionConfig))
 	require.NoError(t, err)
 	require.EqualValues(t, &VersionsConfig{
 		Schema: 1,

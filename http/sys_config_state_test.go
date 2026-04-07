@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package http
@@ -182,6 +182,7 @@ func TestSysConfigState_Sanitized(t *testing.T) {
 				"enable_post_unseal_trace":       false,
 				"post_unseal_trace_directory":    "",
 				"remove_irrevocable_lease_after": json.Number("0"),
+				"allow_audit_log_prefixing":      false,
 			}
 
 			if tc.expectedHAStorageOutput != nil {

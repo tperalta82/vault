@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package vault
@@ -27,6 +27,7 @@ import (
 	"github.com/hashicorp/vault/helper/namespace"
 	"github.com/hashicorp/vault/helper/timeutil"
 	"github.com/hashicorp/vault/internalshared/configutil"
+	"github.com/hashicorp/vault/sdk/helper/testhelpers/schema"
 	"github.com/hashicorp/vault/sdk/logical"
 	"github.com/hashicorp/vault/vault/activity"
 	"github.com/mitchellh/mapstructure"
@@ -54,7 +55,7 @@ func TestActivityLog_Creation(t *testing.T) {
 	const namespace_id = "ns123"
 	ts := time.Now()
 
-	a.AddEntityToFragment(entity_id, namespace_id, ts.Unix())
+	a.AddEntityToFragment(entity_id, namespace_id, ts.Unix(), ts.Unix())
 	if a.fragment == nil {
 		t.Fatal("no fragment created")
 	}
@@ -194,10 +195,10 @@ func TestActivityLog_UniqueEntities(t *testing.T) {
 	t2 := time.Now()
 	t3 := t2.Add(60 * time.Second)
 
-	a.AddEntityToFragment(id1, "root", t1.Unix())
-	a.AddEntityToFragment(id2, "root", t2.Unix())
-	a.AddEntityToFragment(id2, "root", t3.Unix())
-	a.AddEntityToFragment(id1, "root", t3.Unix())
+	a.AddEntityToFragment(id1, "root", t1.Unix(), t1.Unix())
+	a.AddEntityToFragment(id2, "root", t2.Unix(), t2.Unix())
+	a.AddEntityToFragment(id2, "root", t3.Unix(), t3.Unix())
+	a.AddEntityToFragment(id1, "root", t3.Unix(), t3.Unix())
 
 	if a.fragment == nil {
 		t.Fatal("no current fragment")
@@ -466,8 +467,8 @@ func TestActivityLog_SaveEntitiesToStorage(t *testing.T) {
 	}
 	path := fmt.Sprintf("%sentity/%d/0", ActivityLogPrefix, a.GetStartTimestamp())
 
-	a.AddEntityToFragment(ids[0], "root", times[0])
-	a.AddEntityToFragment(ids[1], "root2", times[1])
+	a.AddEntityToFragment(ids[0], "root", times[0], times[0])
+	a.AddEntityToFragment(ids[1], "root2", times[1], times[1])
 	err := a.saveCurrentSegmentToStorage(ctx, false)
 	if err != nil {
 		t.Fatalf("got error writing entities to storage: %v", err)
@@ -484,8 +485,8 @@ func TestActivityLog_SaveEntitiesToStorage(t *testing.T) {
 	}
 	expectedEntityIDs(t, out, ids[:2])
 
-	a.AddEntityToFragment(ids[0], "root", times[2])
-	a.AddEntityToFragment(ids[2], "root", times[2])
+	a.AddEntityToFragment(ids[0], "root", times[2], times[2])
+	a.AddEntityToFragment(ids[2], "root", times[2], times[2])
 	err = a.saveCurrentSegmentToStorage(ctx, false)
 	if err != nil {
 		t.Fatalf("got error writing segments to storage: %v", err)
@@ -759,7 +760,7 @@ func TestActivityLog_MultipleFragmentsAndSegments(t *testing.T) {
 
 	// First ActivitySegmentClientCapacity should fit in one segment
 	for i := 0; i < 4000; i++ {
-		a.AddEntityToFragment(genID(i), "root", ts)
+		a.AddEntityToFragment(genID(i), "root", ts, ts)
 	}
 
 	// Consume new fragment notification.
@@ -788,7 +789,7 @@ func TestActivityLog_MultipleFragmentsAndSegments(t *testing.T) {
 
 	// 4000 more local entities
 	for i := 4000; i < 8000; i++ {
-		a.AddEntityToFragment(genID(i), "root", ts)
+		a.AddEntityToFragment(genID(i), "root", ts, ts)
 	}
 
 	// Simulated remote fragment with 100 duplicate entities
@@ -1542,7 +1543,8 @@ func TestActivityLog_StopAndRestart(t *testing.T) {
 		t.Fatalf("nil token count map")
 	}
 
-	a.AddEntityToFragment("1111-1111", "root", time.Now().Unix())
+	ts := time.Now().Unix()
+	a.AddEntityToFragment("1111-1111", "root", ts, ts)
 	a.AddTokenToFragment("root")
 
 	err = a.saveCurrentSegmentToStorage(ctx, false)
@@ -2063,8 +2065,8 @@ func TestActivityLog_EnableDisable(t *testing.T) {
 	id1 := "11111111-1111-1111-1111-111111111111"
 	id2 := "22222222-2222-2222-2222-222222222222"
 	id3 := "33333333-3333-3333-3333-333333333333"
-	a.AddEntityToFragment(id1, "root", time.Now().Unix())
-	a.AddEntityToFragment(id2, "root", time.Now().Unix())
+	a.AddEntityToFragment(id1, "root", time.Now().Unix(), time.Now().Unix())
+	a.AddEntityToFragment(id2, "root", time.Now().Unix(), time.Now().Unix())
 
 	a.SetStartTimestamp(a.GetStartTimestamp() - 10)
 	seg1 := a.GetStartTimestamp()
@@ -2078,7 +2080,7 @@ func TestActivityLog_EnableDisable(t *testing.T) {
 	readSegmentFromStorage(t, core, path)
 
 	// Add in-memory fragment
-	a.AddEntityToFragment(id3, "root", time.Now().Unix())
+	a.AddEntityToFragment(id3, "root", time.Now().Unix(), time.Now().Unix())
 
 	// disable and verify segment exists
 	disableRequest()
@@ -2130,7 +2132,7 @@ func TestActivityLog_EndOfMonth(t *testing.T) {
 	id1 := "11111111-1111-1111-1111-111111111111"
 	id2 := "22222222-2222-2222-2222-222222222222"
 	id3 := "33333333-3333-3333-3333-333333333333"
-	a.AddEntityToFragment(id1, "root", time.Now().Unix())
+	a.AddEntityToFragment(id1, "root", time.Now().Unix(), time.Now().Unix())
 
 	month0 := time.Now().UTC()
 	segment0 := a.GetStartTimestamp()
@@ -2178,12 +2180,12 @@ func TestActivityLog_EndOfMonth(t *testing.T) {
 		t.Errorf("expected previous month %v got %v", segment1, intent.NextMonth)
 	}
 
-	a.AddEntityToFragment(id2, "root", time.Now().Unix())
+	a.AddEntityToFragment(id2, "root", time.Now().Unix(), time.Now().Unix())
 
 	a.HandleEndOfMonth(ctx, month2)
 	segment2 := a.GetStartTimestamp()
 
-	a.AddEntityToFragment(id3, "root", time.Now().Unix())
+	a.AddEntityToFragment(id3, "root", time.Now().Unix(), time.Now().Unix())
 
 	err = a.saveCurrentSegmentToStorage(ctx, false)
 	if err != nil {
@@ -2629,7 +2631,7 @@ func TestActivityLog_SaveAfterDisable(t *testing.T) {
 		DefaultReportMonths: 12,
 	})
 
-	a.AddEntityToFragment("1111-1111-11111111", "root", time.Now().Unix())
+	a.AddEntityToFragment("1111-1111-11111111", "root", time.Now().Unix(), time.Now().Unix())
 	startTimestamp := a.GetStartTimestamp()
 
 	// This kicks off an asynchronous delete
@@ -4640,7 +4642,7 @@ func TestActivityLog_HandleEndOfMonth(t *testing.T) {
 	}()
 	core.activityLog.SetEnable(true)
 	core.activityLog.SetStartTimestamp(now.Unix())
-	core.activityLog.AddClientToFragment("id", "ns", now.Unix(), false, "mount")
+	core.activityLog.AddClientToFragment("id", "ns", now.Unix(), false, "mount", now.Unix())
 
 	// wait for the end of month to be triggered
 	select {
@@ -4672,7 +4674,7 @@ func TestAddActivityToFragment(t *testing.T) {
 	mount := "mount"
 	ns := "root"
 	id := "id1"
-	a.AddActivityToFragment(id, ns, 0, entityActivityType, mount)
+	a.AddActivityToFragment(id, ns, 0, entityActivityType, mount, 0)
 
 	testCases := []struct {
 		name         string
@@ -4728,7 +4730,7 @@ func TestAddActivityToFragment(t *testing.T) {
 			numClientsBefore := len(a.fragment.Clients)
 			a.fragmentLock.RUnlock()
 
-			a.AddActivityToFragment(tc.id, ns, 0, tc.activityType, mount)
+			a.AddActivityToFragment(tc.id, ns, 0, tc.activityType, mount, 0)
 			a.fragmentLock.RLock()
 			defer a.fragmentLock.RUnlock()
 			numClientsAfter := len(a.fragment.Clients)
@@ -5079,5 +5081,51 @@ func TestActivityLog_partialMonthClientCountUsingWriteExport(t *testing.T) {
 				require.Equal(t, expectedCurrentMonthClients[i].ClientType, results[i].ClientType)
 			}
 		})
+	}
+}
+
+// TestValidate_CountersResponses validates the responses schema of counters endpoints
+func TestValidate_CountersResponses(t *testing.T) {
+	core, b, _ := testCoreSystemBackend(t)
+	view := core.systemBarrierView
+
+	testCases := []struct {
+		operationType string
+		path          string
+	}{
+		{
+			operationType: logical.UpdateOperation,
+			path:          "internal/counters/config",
+		},
+		{
+			operationType: logical.ReadOperation,
+			path:          "internal/counters/config",
+		},
+		{
+			operationType: logical.ReadOperation,
+			path:          "internal/counters/activity",
+		},
+		{
+			operationType: logical.ReadOperation,
+			path:          "internal/counters/activity/export",
+		},
+		{
+			operationType: logical.ReadOperation,
+			path:          "internal/counters/activity/monthly",
+		},
+	}
+
+	for _, tc := range testCases {
+		// validate the schema definition of responses
+		req := logical.TestRequest(t, logical.Operation(tc.operationType), tc.path)
+		req.Storage = view
+		resp, err := b.HandleRequest(namespace.RootContext(context.TODO()), req)
+		schema.ValidateResponse(
+			t,
+			schema.GetResponseSchema(t, b.(*SystemBackend).Route(req.Path), req.Operation),
+			resp,
+			true,
+		)
+		require.NoError(t, err)
 	}
 }

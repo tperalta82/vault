@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package pki
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/vault/builtin/logical/pki/issuing"
+	"github.com/hashicorp/vault/builtin/logical/pki/observe"
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/helper/certutil"
 	"github.com/hashicorp/vault/sdk/helper/consts"
@@ -373,7 +374,7 @@ non-Hostname, non-Email address CNs.`,
 			Type: framework.TypeCommaStringSlice,
 			Description: `A comma-separated string or list of policy OIDs, or a JSON list of qualified policy
 information, which must include an oid, and may include a notice and/or cps url, using the form 
-[{"oid"="1.3.6.1.4.1.7.8","notice"="I am a user Notice"}, {"oid"="1.3.6.1.4.1.44947.1.2.4 ","cps"="https://example.com"}].`,
+[{"oid"="1.3.6.1.4.1.7.8","notice"="I am a user Notice"}, {"oid"="1.3.6.1.4.1.32473.1.2.4","cps"="https://example.com"}].`,
 		},
 
 		"basic_constraints_valid_for_non_ca": {
@@ -801,7 +802,7 @@ non-Hostname, non-Email address CNs.`,
 				Type: framework.TypeCommaStringSlice,
 				Description: `A comma-separated string or list of policy OIDs, or a JSON list of qualified policy
 information, which must include an oid, and may include a notice and/or cps url, using the form 
-[{"oid"="1.3.6.1.4.1.7.8","notice"="I am a user Notice"}, {"oid"="1.3.6.1.4.1.44947.1.2.4 ","cps"="https://example.com"}].`,
+[{"oid"="1.3.6.1.4.1.7.8","notice"="I am a user Notice"}, {"oid"="1.3.6.1.4.1.32473.1.2.4","cps"="https://example.com"}].`,
 			},
 
 			"basic_constraints_valid_for_non_ca": {
@@ -920,10 +921,15 @@ func (b *backend) GetRole(ctx context.Context, s logical.Storage, n string) (*is
 }
 
 func (b *backend) pathRoleDelete(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-	err := req.Storage.Delete(ctx, "role/"+data.Get("name").(string))
+	roleName := data.Get("name").(string)
+	err := req.Storage.Delete(ctx, "role/"+roleName)
 	if err != nil {
 		return nil, err
 	}
+
+	b.pkiObserver.RecordPKIObservation(ctx, req, observe.ObservationTypePKIRoleDelete,
+		observe.NewAdditionalPKIMetadata("role_name", roleName),
+	)
 
 	return nil, nil
 }
@@ -945,6 +951,12 @@ func (b *backend) pathRoleRead(ctx context.Context, req *logical.Request, data *
 	resp := &logical.Response{
 		Data: role.ToResponseData(),
 	}
+
+	b.pkiObserver.RecordPKIObservation(ctx, req, observe.ObservationTypePKIRoleRead,
+		observe.NewAdditionalPKIMetadata("issuer_name", role.Issuer),
+		observe.NewAdditionalPKIMetadata("role_name", role.Name),
+	)
+
 	return resp, nil
 }
 
@@ -1067,6 +1079,16 @@ func (b *backend) pathRoleCreate(ctx context.Context, req *logical.Request, data
 		return nil, err
 	}
 
+	b.pkiObserver.RecordPKIObservation(ctx, req, observe.ObservationTypePKIRoleWrite,
+		observe.NewAdditionalPKIMetadata("issuer_name", entry.Issuer),
+		observe.NewAdditionalPKIMetadata("role_name", entry.Name),
+		observe.NewAdditionalPKIMetadata("max_ttl", entry.MaxTTL.String()),
+		observe.NewAdditionalPKIMetadata("ttl", entry.TTL.String()),
+		observe.NewAdditionalPKIMetadata("no_store", entry.NoStore),
+		observe.NewAdditionalPKIMetadata("not_after", entry.NotAfter),
+		observe.NewAdditionalPKIMetadata("not_before_duration", entry.NotBeforeDuration.String()),
+	)
+
 	return resp, nil
 }
 
@@ -1080,9 +1102,11 @@ func validateRole(b *backend, entry *issuing.RoleEntry, ctx context.Context, s l
 		), nil
 	}
 
-	if entry.KeyBits, entry.SignatureBits, err = certutil.ValidateDefaultOrValueKeyTypeSignatureLength(entry.KeyType, entry.KeyBits, entry.SignatureBits); err != nil {
-		return logical.ErrorResponse(err.Error()), nil
+	keyBits, err := certutil.ValidateDefaultOrValueKeyType(entry.KeyType, entry.KeyBits)
+	if err != nil {
+		return nil, fmt.Errorf("error setting keyBits %v on role for keyType %v: %v", entry.KeyBits, entry.KeyType, err.Error())
 	}
+	entry.KeyBits = keyBits
 
 	if entry.SerialNumberSource != "" &&
 		entry.SerialNumberSource != "json-csr" &&
@@ -1110,13 +1134,15 @@ func validateRole(b *backend, entry *issuing.RoleEntry, ctx context.Context, s l
 	// resolve the reference (to an issuerId) at role creation time; instead,
 	// resolve it at use time. This allows values such as `default` or other
 	// user-assigned names to "float" and change over time.
-	if len(entry.Issuer) == 0 {
-		entry.Issuer = defaultRef
+	var issuerId issuing.IssuerID
+	issuer := entry.Issuer
+	if len(issuer) == 0 {
+		issuer = defaultRef
 	}
 	// Check that the issuers reference set resolves to something
 	if !b.UseLegacyBundleCaStorage() {
 		sc := b.makeStorageContext(ctx, s)
-		issuerId, err := sc.resolveIssuerReference(entry.Issuer)
+		issuerId, err = sc.resolveIssuerReference(issuer)
 		if err != nil {
 			if issuerId == issuing.IssuerRefNotFound {
 				resp = &logical.Response{}
@@ -1129,7 +1155,29 @@ func validateRole(b *backend, entry *issuing.RoleEntry, ctx context.Context, s l
 				return nil, err
 			}
 		}
+	}
 
+	// Validate SignatureBits Against Issuer, if there is one, this is just to set a warning, so don't error out here:
+	if issuerId != issuing.IssuerRefNotFound {
+		if b.UseLegacyBundleCaStorage() {
+			issuerId = issuing.LegacyBundleShimID
+		}
+		issuerEntry, _, err := issuing.FetchCertBundleByIssuerId(ctx, s, issuerId, false)
+		if err != nil {
+			resp.AddWarning(fmt.Sprintf("Failed to fetch entry for issuer %q to validate against: %v", entry.Issuer, err))
+		} else {
+			issuerCertificate, err := issuerEntry.GetCertificate()
+			if err != nil {
+				resp.AddWarning(fmt.Sprintf("Unable to get certificate for issuer %s to validate against: %v", entry.Issuer, err))
+			}
+			issuerKeyType := strings.ToLower(issuerCertificate.PublicKeyAlgorithm.String())
+			entry.SignatureBits, err = certutil.ValidateDefaultOrValueHashBits(issuerKeyType, entry.SignatureBits)
+			if err != nil {
+				resp.AddWarning(fmt.Sprintf("The Issuing Certificate %v for this role has a key algorithm, %v, incompatible with the set role signature bits, %v", entry.Issuer, issuerKeyType, entry.SignatureBits))
+			}
+		}
+	} else if entry.SignatureBits == 0 {
+		entry.SignatureBits = 256
 	}
 
 	// Ensures CNValidations are alright
@@ -1281,6 +1329,16 @@ func (b *backend) pathRolePatch(ctx context.Context, req *logical.Request, data 
 	if err := req.Storage.Put(ctx, jsonEntry); err != nil {
 		return nil, err
 	}
+
+	b.pkiObserver.RecordPKIObservation(ctx, req, observe.ObservationTypePKIRolePatch,
+		observe.NewAdditionalPKIMetadata("issuer_name", entry.Issuer),
+		observe.NewAdditionalPKIMetadata("role_name", entry.Name),
+		observe.NewAdditionalPKIMetadata("max_ttl", entry.MaxTTL.String()),
+		observe.NewAdditionalPKIMetadata("ttl", entry.TTL.String()),
+		observe.NewAdditionalPKIMetadata("no_store", entry.NoStore),
+		observe.NewAdditionalPKIMetadata("not_after", entry.NotAfter),
+		observe.NewAdditionalPKIMetadata("not_before_duration", entry.NotBeforeDuration.String()),
+	)
 
 	return resp, nil
 }

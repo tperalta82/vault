@@ -4,11 +4,14 @@ package consts
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _PluginRuntimeTypeName = "unsupportedcontainer"
 
 var _PluginRuntimeTypeIndex = [...]uint8{0, 11, 20}
+
+const _PluginRuntimeTypeLowerName = "unsupportedcontainer"
 
 func (i PluginRuntimeType) String() string {
 	i -= 1
@@ -18,11 +21,26 @@ func (i PluginRuntimeType) String() string {
 	return _PluginRuntimeTypeName[_PluginRuntimeTypeIndex[i]:_PluginRuntimeTypeIndex[i+1]]
 }
 
-var _PluginRuntimeTypeValues = []PluginRuntimeType{1, 2}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _PluginRuntimeTypeNoOp() {
+	var x [1]struct{}
+	_ = x[PluginRuntimeTypeUnsupported-(1)]
+	_ = x[PluginRuntimeTypeContainer-(2)]
+}
+
+var _PluginRuntimeTypeValues = []PluginRuntimeType{PluginRuntimeTypeUnsupported, PluginRuntimeTypeContainer}
 
 var _PluginRuntimeTypeNameToValueMap = map[string]PluginRuntimeType{
-	_PluginRuntimeTypeName[0:11]:  1,
-	_PluginRuntimeTypeName[11:20]: 2,
+	_PluginRuntimeTypeName[0:11]:       PluginRuntimeTypeUnsupported,
+	_PluginRuntimeTypeLowerName[0:11]:  PluginRuntimeTypeUnsupported,
+	_PluginRuntimeTypeName[11:20]:      PluginRuntimeTypeContainer,
+	_PluginRuntimeTypeLowerName[11:20]: PluginRuntimeTypeContainer,
+}
+
+var _PluginRuntimeTypeNames = []string{
+	_PluginRuntimeTypeName[0:11],
+	_PluginRuntimeTypeName[11:20],
 }
 
 // PluginRuntimeTypeString retrieves an enum value from the enum constants string name.
@@ -31,12 +49,23 @@ func PluginRuntimeTypeString(s string) (PluginRuntimeType, error) {
 	if val, ok := _PluginRuntimeTypeNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _PluginRuntimeTypeNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to PluginRuntimeType values", s)
 }
 
 // PluginRuntimeTypeValues returns all values of the enum
 func PluginRuntimeTypeValues() []PluginRuntimeType {
 	return _PluginRuntimeTypeValues
+}
+
+// PluginRuntimeTypeStrings returns a slice of all String values of the enum
+func PluginRuntimeTypeStrings() []string {
+	strs := make([]string, len(_PluginRuntimeTypeNames))
+	copy(strs, _PluginRuntimeTypeNames)
+	return strs
 }
 
 // IsAPluginRuntimeType returns "true" if the value is listed in the enum definition. "false" otherwise

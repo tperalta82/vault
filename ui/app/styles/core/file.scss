@@ -1,11 +1,10 @@
 @use '../utils/box-shadow_variables';
-@use '../utils/color_variables';
 @use '../utils/size_variables';
 @use '../core/buttons.scss';
 @use '../core/inputs.scss';
 
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -49,7 +48,7 @@
 .file-delete-button {
   @extend .button;
   @extend .is-transparent;
-  color: color_variables.$grey;
+  color: var(--token-color-palette-neutral-400);
   position: absolute;
   right: size_variables.$spacing-8;
 }

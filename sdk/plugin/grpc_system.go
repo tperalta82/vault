@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: MPL-2.0
 
 package plugin
@@ -224,6 +224,21 @@ func (s *gRPCSystemViewClient) GenerateIdentityToken(ctx context.Context, req *p
 	return &pluginutil.IdentityTokenResponse{
 		Token: pluginutil.IdentityToken(resp.Token),
 		TTL:   time.Duration(resp.TTL) * time.Second,
+	}, nil
+}
+
+func (s *gRPCSystemViewClient) GetRotationInformation(ctx context.Context, req *rotation.RotationInfoRequest) (*rotation.RotationInfoResponse, error) {
+	resp, err := s.client.GetRotationInformation(ctx, &pb.RotationInfoRequest{
+		MountPath: req.ReqPath,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &rotation.RotationInfoResponse{
+		NextVaultRotation: time.Unix(resp.ExpireTime, 0),
+		LastVaultRotation: time.Unix(resp.IssueTime, 0),
+		TTL:               resp.TTL,
 	}, nil
 }
 
@@ -461,6 +476,27 @@ func (s *gRPCSystemViewServer) GenerateIdentityToken(ctx context.Context, req *p
 	return &pb.GenerateIdentityTokenResponse{
 		Token: res.Token.Token(),
 		TTL:   int64(res.TTL.Seconds()),
+	}, nil
+}
+
+func (s *gRPCSystemViewServer) GetRotationInformation(ctx context.Context, req *pb.RotationInfoRequest) (*pb.RotationInfoReply, error) {
+	if s.impl == nil {
+		return nil, errMissingSystemView
+	}
+
+	cfgReq := &rotation.RotationInfoRequest{
+		ReqPath: req.MountPath,
+	}
+
+	resp, err := s.impl.GetRotationInformation(ctx, cfgReq)
+	if err != nil {
+		return &pb.RotationInfoReply{}, status.Error(codes.Internal, err.Error())
+	}
+
+	return &pb.RotationInfoReply{
+		IssueTime:  resp.LastVaultRotation.Unix(),
+		ExpireTime: resp.NextVaultRotation.Unix(),
+		TTL:        resp.TTL,
 	}, nil
 }
 

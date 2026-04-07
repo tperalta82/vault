@@ -4,11 +4,14 @@ package pki
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _tidyStatusStateName = "InactiveStartedFinishedErrorCancellingCancelled"
 
 var _tidyStatusStateIndex = [...]uint8{0, 8, 15, 23, 28, 38, 47}
+
+const _tidyStatusStateLowerName = "inactivestartedfinishederrorcancellingcancelled"
 
 func (i tidyStatusState) String() string {
 	if i < 0 || i >= tidyStatusState(len(_tidyStatusStateIndex)-1) {
@@ -17,15 +20,42 @@ func (i tidyStatusState) String() string {
 	return _tidyStatusStateName[_tidyStatusStateIndex[i]:_tidyStatusStateIndex[i+1]]
 }
 
-var _tidyStatusStateValues = []tidyStatusState{0, 1, 2, 3, 4, 5}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _tidyStatusStateNoOp() {
+	var x [1]struct{}
+	_ = x[tidyStatusInactive-(0)]
+	_ = x[tidyStatusStarted-(1)]
+	_ = x[tidyStatusFinished-(2)]
+	_ = x[tidyStatusError-(3)]
+	_ = x[tidyStatusCancelling-(4)]
+	_ = x[tidyStatusCancelled-(5)]
+}
+
+var _tidyStatusStateValues = []tidyStatusState{tidyStatusInactive, tidyStatusStarted, tidyStatusFinished, tidyStatusError, tidyStatusCancelling, tidyStatusCancelled}
 
 var _tidyStatusStateNameToValueMap = map[string]tidyStatusState{
-	_tidyStatusStateName[0:8]:   0,
-	_tidyStatusStateName[8:15]:  1,
-	_tidyStatusStateName[15:23]: 2,
-	_tidyStatusStateName[23:28]: 3,
-	_tidyStatusStateName[28:38]: 4,
-	_tidyStatusStateName[38:47]: 5,
+	_tidyStatusStateName[0:8]:        tidyStatusInactive,
+	_tidyStatusStateLowerName[0:8]:   tidyStatusInactive,
+	_tidyStatusStateName[8:15]:       tidyStatusStarted,
+	_tidyStatusStateLowerName[8:15]:  tidyStatusStarted,
+	_tidyStatusStateName[15:23]:      tidyStatusFinished,
+	_tidyStatusStateLowerName[15:23]: tidyStatusFinished,
+	_tidyStatusStateName[23:28]:      tidyStatusError,
+	_tidyStatusStateLowerName[23:28]: tidyStatusError,
+	_tidyStatusStateName[28:38]:      tidyStatusCancelling,
+	_tidyStatusStateLowerName[28:38]: tidyStatusCancelling,
+	_tidyStatusStateName[38:47]:      tidyStatusCancelled,
+	_tidyStatusStateLowerName[38:47]: tidyStatusCancelled,
+}
+
+var _tidyStatusStateNames = []string{
+	_tidyStatusStateName[0:8],
+	_tidyStatusStateName[8:15],
+	_tidyStatusStateName[15:23],
+	_tidyStatusStateName[23:28],
+	_tidyStatusStateName[28:38],
+	_tidyStatusStateName[38:47],
 }
 
 // tidyStatusStateString retrieves an enum value from the enum constants string name.
@@ -34,12 +64,23 @@ func tidyStatusStateString(s string) (tidyStatusState, error) {
 	if val, ok := _tidyStatusStateNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _tidyStatusStateNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to tidyStatusState values", s)
 }
 
 // tidyStatusStateValues returns all values of the enum
 func tidyStatusStateValues() []tidyStatusState {
 	return _tidyStatusStateValues
+}
+
+// tidyStatusStateStrings returns a slice of all String values of the enum
+func tidyStatusStateStrings() []string {
+	strs := make([]string, len(_tidyStatusStateNames))
+	copy(strs, _tidyStatusStateNames)
+	return strs
 }
 
 // IsAtidyStatusState returns "true" if the value is listed in the enum definition. "false" otherwise

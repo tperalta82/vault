@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 scenario "dev_single_cluster" {
@@ -9,7 +9,7 @@ scenario "dev_single_cluster" {
     non-dev scenario instead.
 
     For a full tutorial for this scenario, see here:
-    https://eng-handbook.hashicorp.services/internal-tools/enos/tutorial-vault-dev-scenario-single-cluster/
+    https://hashicorp.atlassian.net/wiki/spaces/VAULT/pages/4163469313/Enos+Tutorial
   EOF
 
   // The matrix is where we define all the baseline combinations that enos can utilize to customize
@@ -20,7 +20,7 @@ scenario "dev_single_cluster" {
     arch     = ["amd64", "arm64"]
     artifact = ["local", "deb", "rpm", "zip"]
     backend  = ["consul", "raft"]
-    distro   = ["amzn", "leap", "rhel", "sles", "ubuntu"]
+    distro   = ["amzn", "rhel", "sles", "ubuntu"]
     edition  = ["ce", "ent", "ent.fips1403", "ent.hsm", "ent.hsm.fips1403"]
     seal     = ["awskms", "pkcs11", "shamir"]
 
@@ -41,7 +41,7 @@ scenario "dev_single_cluster" {
 
     exclude {
       artifact = ["deb", "rpm"]
-      distro   = ["sles", "leap"]
+      distro   = ["sles"]
     }
 
     exclude {
@@ -72,7 +72,6 @@ scenario "dev_single_cluster" {
     // specified in enos-providers.hcl), and we need to be able to access both of those here.
     enos_provider = {
       amzn   = provider.enos.ec2_user
-      leap   = provider.enos.ec2_user
       rhel   = provider.enos.ec2_user
       sles   = provider.enos.ec2_user
       ubuntu = provider.enos.ubuntu
@@ -107,12 +106,10 @@ scenario "dev_single_cluster" {
         artifactory_repo:
           The artifactory host to search. It's very unlikely that you'll want to change this. The
           default value is where CRT will publish packages.
-        artifactory_username:
-          The artifactory username associated with your token. You'll need this if you wish to use
-          deb or rpm artifacts! You can request access via Okta.
         artifactory_token:
-          The artifactory token associated with your username. You'll need this if you wish to use
-          deb or rpm artifacts! You can create a token by logging into Artifactory via Okta.
+          The artifactory identity token to use for authentication. You'll need this if you wish
+          to use deb or rpm artifacts! You can get a token by joining the 'artifactory-users' Doormat
+          group and using 'doormat artifactory create-token'.
         dev_build_local_ui:
           If you are not testing any changes in the UI, set to false. This will save time by not
           building the entire UI. If you need to test the UI, set to true.
@@ -143,12 +140,11 @@ scenario "dev_single_cluster" {
       // Required when using a RPM or Deb package
       // Some of these variables don't have default values so we'll only set them if they are
       // required.
-      artifactory_host     = local.use_artifactory ? var.artifactory_host : null
-      artifactory_repo     = local.use_artifactory ? var.artifactory_repo : null
-      artifactory_username = local.use_artifactory ? var.artifactory_username : null
-      artifactory_token    = local.use_artifactory ? var.artifactory_token : null
-      distro               = matrix.distro
-      distro_version       = global.distro_version[matrix.distro]
+      artifactory_host  = local.use_artifactory ? var.artifactory_host : null
+      artifactory_repo  = local.use_artifactory ? var.artifactory_repo : null
+      artifactory_token = local.use_artifactory ? var.artifactory_token : null
+      distro            = matrix.distro
+      distro_version    = global.distro_version[matrix.distro]
     }
   }
 

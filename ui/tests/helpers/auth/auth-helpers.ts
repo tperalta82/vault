@@ -1,14 +1,16 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
-import { click, fillIn, visit } from '@ember/test-helpers';
+import { click, currentRouteName, fillIn, visit, waitUntil } from '@ember/test-helpers';
 import VAULT_KEYS from 'vault/tests/helpers/vault-keys';
 import { AUTH_FORM } from 'vault/tests/helpers/auth/auth-form-selectors';
 import { GENERAL } from 'vault/tests/helpers/general-selectors';
+import AuthMethodResource from 'vault/resources/auth/method';
 
 import type { LoginFields } from 'vault/vault/auth/form';
+import type ApiService from 'vault/services/api';
 
 export const { rootToken } = VAULT_KEYS;
 
@@ -29,7 +31,8 @@ export const login = async (token = rootToken) => {
 
   await fillIn(AUTH_FORM.selectMethod, 'token');
   await fillIn(GENERAL.inputByAttr('token'), token);
-  return click(GENERAL.submitButton);
+  await click(GENERAL.submitButton);
+  return await waitUntil(() => currentRouteName() === 'vault.cluster.dashboard');
 };
 
 export const loginNs = async (ns: string, token = rootToken) => {
@@ -41,7 +44,8 @@ export const loginNs = async (ns: string, token = rootToken) => {
 
   await fillIn(AUTH_FORM.selectMethod, 'token');
   await fillIn(GENERAL.inputByAttr('token'), token);
-  return click(GENERAL.submitButton);
+  await click(GENERAL.submitButton);
+  return await waitUntil(() => currentRouteName() === 'vault.cluster.dashboard');
 };
 
 // LOGIN WITH NON-TOKEN METHODS
@@ -56,7 +60,8 @@ export const loginMethod = async (
   await fillIn(AUTH_FORM.selectMethod, type);
 
   await fillInLoginFields(loginFields, options);
-  return click(GENERAL.submitButton);
+  await click(GENERAL.submitButton);
+  return await waitUntil(() => currentRouteName() === 'vault.cluster.dashboard');
 };
 
 export const fillInLoginFields = async (loginFields: LoginFields, { toggleOptions = false } = {}) => {
@@ -71,7 +76,7 @@ export const fillInLoginFields = async (loginFields: LoginFields, { toggleOption
 
 const LOGIN_DATA = {
   token: { token: 'mysupersecuretoken' },
-  username: { username: 'matilda', password: 'password' },
+  username: { username: 'matilda', password: 'some-password' },
   role: { role: 'some-dev' },
 };
 // maps auth type to login input data
@@ -115,3 +120,7 @@ export const SYS_INTERNAL_UI_MOUNTS = {
     type: 'ldap',
   },
 };
+
+// helper function to stub logic in the AuthRoute to format visibleAuthMounts for integration tests
+export const formatAuthMounts = (api: ApiService, mounts = SYS_INTERNAL_UI_MOUNTS) =>
+  api.responseObjectToArray(mounts, 'path').map((method) => new AuthMethodResource(method, this));

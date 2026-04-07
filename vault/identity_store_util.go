@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package vault
@@ -26,6 +26,7 @@ import (
 	"github.com/hashicorp/vault/helper/storagepacker"
 	"github.com/hashicorp/vault/sdk/helper/consts"
 	"github.com/hashicorp/vault/sdk/logical"
+	"github.com/hashicorp/vault/vault/observations"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -776,6 +777,37 @@ func getAccessorsOnDuplicateAliases(aliases []*identity.Alias) []string {
 	return mountAccessors
 }
 
+// fetchEntityInTxn retrieves an identity entity by its ID within the context of a MemDB transaction.
+// If the entity is not found by its direct ID, it attempts performs a lookup using the merged entity index.
+// The returned entity may be a clone or the original reference, depending on the value of the `clone` parameter.
+func (i *IdentityStore) fetchEntityInTxn(txn *memdb.Txn, entityID string, clone bool) (*identity.Entity, error) {
+	if entityID == "" {
+		return nil, fmt.Errorf("empty entity ID")
+	}
+	if txn == nil {
+		return nil, fmt.Errorf("nil txn")
+	}
+
+	entity, err := i.MemDBEntityByIDInTxn(txn, entityID, clone)
+	if err != nil {
+		i.logger.Error("failed to lookup entity using its ID", "error", err)
+		return nil, err
+	}
+
+	if entity == nil {
+		// If there was no corresponding entity object found, it is
+		// possible that the entity got merged into another entity. Try
+		// finding entity based on the merged entity index.
+		entity, err = i.MemDBEntityByMergedEntityIDInTxn(txn, entityID, clone)
+		if err != nil {
+			i.logger.Error("failed to lookup entity in merged entity ID index", "error", err)
+			return nil, err
+		}
+	}
+
+	return entity, nil
+}
+
 // upsertEntityInTxn either creates or updates an existing entity. The
 // operations will be updated in both MemDB and storage. If 'persist' is set to
 // false, then storage will not be updated. When an alias is transferred from
@@ -1212,6 +1244,23 @@ func (i *IdentityStore) MemDBUpsertAliasInTxn(txn *memdb.Txn, alias *identity.Al
 		return fmt.Errorf("failed to update alias into memdb: %w", err)
 	}
 
+	err = i.Backend.RecordObservation(context.Background(), observations.ObservationTypeAliasUpsert, map[string]interface{}{
+		"group_alias":        groupAlias,
+		"alias_id":           alias.ID,
+		"alias_namespace_id": alias.NamespaceID,
+		"mount_path":         alias.MountPath,
+		"mount_type":         alias.MountType,
+		"mount_accessor":     alias.MountAccessor,
+		"local":              alias.Local,
+		"metadata":           alias.Metadata,
+		"custom_metadata":    alias.CustomMetadata,
+		"creation_time":      alias.CreationTime.AsTime().Format(time.RFC3339),
+		"last_update_time":   alias.LastUpdateTime.AsTime().Format(time.RFC3339),
+	})
+	if err != nil {
+		i.logger.Error("failed to record observation for alias upsert", "error", err)
+	}
+
 	return nil
 }
 
@@ -1341,6 +1390,23 @@ func (i *IdentityStore) MemDBDeleteAliasByIDInTxn(txn *memdb.Txn, aliasID string
 		return fmt.Errorf("failed to delete alias from memdb: %w", err)
 	}
 
+	err = i.Backend.RecordObservation(context.Background(), observations.ObservationTypeAliasDelete, map[string]interface{}{
+		"group_alias":        groupAlias,
+		"alias_id":           alias.ID,
+		"alias_namespace_id": alias.NamespaceID,
+		"mount_path":         alias.MountPath,
+		"mount_type":         alias.MountType,
+		"mount_accessor":     alias.MountAccessor,
+		"local":              alias.Local,
+		"metadata":           alias.Metadata,
+		"custom_metadata":    alias.CustomMetadata,
+		"creation_time":      alias.CreationTime.AsTime().Format(time.RFC3339),
+		"last_update_time":   alias.LastUpdateTime.AsTime().Format(time.RFC3339),
+	})
+	if err != nil {
+		i.logger.Error("failed to record observation for alias deletion", "error", err)
+	}
+
 	return nil
 }
 
@@ -1391,7 +1457,47 @@ func (i *IdentityStore) MemDBUpsertEntityInTxn(txn *memdb.Txn, entity *identity.
 		return fmt.Errorf("failed to update entity into memdb: %w", err)
 	}
 
+	err = i.Backend.RecordObservation(context.Background(), observations.ObservationTypeEntityUpsert, map[string]interface{}{
+		"entity_id":           entity.ID,
+		"entity_namespace_id": entity.NamespaceID,
+		"metadata":            entity.Metadata,
+		"aliases":             aliasesToEntityObservationAliases(entity.Aliases),
+		"policies":            entity.Policies,
+		"creation_time":       entity.CreationTime.AsTime().Format(time.RFC3339),
+		"last_updated_time":   entity.LastUpdateTime.AsTime().Format(time.RFC3339),
+		"merged_entity_ids":   entity.MergedEntityIDs,
+		"is_new_entity":       entityRaw == nil,
+	})
+	if err != nil {
+		i.logger.Error("failed to record observation for entity upsert", "error", err)
+	}
+
 	return nil
+}
+
+// EntityObservationAliases is a minimal version of aliases to contain only
+// salient information for entity upsert observations.
+type EntityObservationAliases struct {
+	Id            string `json:"id"`
+	MountPath     string `json:"mount_path"`
+	MountType     string `json:"mount_type"`
+	MountAccessor string `json:"mount_accessor"`
+}
+
+// aliasesToEntityObservationAliases translated a list of *identity.Alias into a list of EntityObservationAliases
+func aliasesToEntityObservationAliases(aliases []*identity.Alias) []*EntityObservationAliases {
+	entityObservationAliases := make([]*EntityObservationAliases, 0, len(aliases))
+	for _, alias := range aliases {
+		if alias != nil {
+			entityObservationAliases = append(entityObservationAliases, &EntityObservationAliases{
+				Id:            alias.ID,
+				MountPath:     alias.MountPath,
+				MountType:     alias.MountType,
+				MountAccessor: alias.MountAccessor,
+			})
+		}
+	}
+	return entityObservationAliases
 }
 
 func (i *IdentityStore) MemDBEntityByIDInTxn(txn *memdb.Txn, entityID string, clone bool) (*identity.Entity, error) {
@@ -1533,6 +1639,19 @@ func (i *IdentityStore) MemDBEntityByMergedEntityID(mergedEntityID string, clone
 
 	txn := i.db.Txn(false)
 
+	return i.MemDBEntityByMergedEntityIDInTxn(txn, mergedEntityID, clone)
+}
+
+// MemDBEntityByMergedEntityIDInTxn fetches an identity.Entity from MemDB by looking up the provided
+// merged entity ID within the context of the provided transaction. If 'clone' is set to true,
+// a clone of the fetched entity is returned to prevent unintended modifications to the original
+// entity stored in MemDB. If no entity is found with the given merged entity ID, nil is returned.
+// An error is returned if there are issues during the lookup or if the type assertion fails.
+func (i *IdentityStore) MemDBEntityByMergedEntityIDInTxn(txn *memdb.Txn, mergedEntityID string, clone bool) (*identity.Entity, error) {
+	if mergedEntityID == "" {
+		return nil, fmt.Errorf("missing merged entity id")
+	}
+
 	entityRaw, err := txn.First(entitiesTable, "merged_entity_ids", mergedEntityID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch entity from memdb using merged entity id: %w", err)
@@ -1654,6 +1773,20 @@ func (i *IdentityStore) MemDBDeleteEntityByIDInTxn(txn *memdb.Txn, entityID stri
 	err = txn.Delete(entitiesTable, entity)
 	if err != nil {
 		return fmt.Errorf("failed to delete entity from memdb: %w", err)
+	}
+
+	err = i.Backend.RecordObservation(context.Background(), observations.ObservationTypeEntityDelete, map[string]interface{}{
+		"entity_id":           entity.ID,
+		"entity_namespace_id": entity.NamespaceID,
+		"metadata":            entity.Metadata,
+		"aliases":             entity.Aliases,
+		"policies":            entity.Policies,
+		"creation_time":       entity.CreationTime.AsTime().Format(time.RFC3339),
+		"last_updated_time":   entity.LastUpdateTime.AsTime().Format(time.RFC3339),
+		"merged_entity_ids":   entity.MergedEntityIDs,
+	})
+	if err != nil {
+		i.logger.Error("failed to record observation for entity deletion", "error", err)
 	}
 
 	return nil
@@ -2190,6 +2323,19 @@ func (i *IdentityStore) UpsertGroupInTxn(ctx context.Context, txn *memdb.Txn, gr
 	return nil
 }
 
+// GroupAliasInformation is a set of information about a group's alias, if present
+type GroupAliasInformation struct {
+	Id             string            `json:"id"`
+	Name           string            `json:"name"`
+	MountType      string            `json:"mount_type"`
+	MountAccessor  string            `json:"mount_accessor"`
+	MountPath      string            `json:"mount_path"`
+	Metadata       map[string]string `json:"metadata"`
+	CustomMetadata map[string]string `json:"custom_metadata"`
+	CreationTime   string            `json:"creation_time"`
+	LastUpdateTime string            `json:"last_update_time"`
+}
+
 func (i *IdentityStore) MemDBUpsertGroupInTxn(txn *memdb.Txn, group *identity.Group) error {
 	if txn == nil {
 		return fmt.Errorf("nil txn")
@@ -2219,6 +2365,39 @@ func (i *IdentityStore) MemDBUpsertGroupInTxn(txn *memdb.Txn, group *identity.Gr
 		return fmt.Errorf("failed to update group into memdb: %w", err)
 	}
 
+	var aliasInfo *GroupAliasInformation
+	if group.Alias != nil {
+		// We should re-marshall this so that we can correctly format, for example, the time.
+		aliasInfo = &GroupAliasInformation{
+			Id:             group.Alias.ID,
+			Name:           group.Alias.Name,
+			MountType:      group.Alias.MountType,
+			MountAccessor:  group.Alias.MountAccessor,
+			MountPath:      group.Alias.MountPath,
+			Metadata:       group.Alias.Metadata,
+			CustomMetadata: group.Alias.CustomMetadata,
+			CreationTime:   group.Alias.CreationTime.AsTime().Format(time.RFC3339),
+			LastUpdateTime: group.Alias.LastUpdateTime.AsTime().Format(time.RFC3339),
+		}
+	}
+
+	err = i.Backend.RecordObservation(context.Background(), observations.ObservationTypeGroupUpsert, map[string]interface{}{
+		"group_id":           group.ID,
+		"alias":              aliasInfo,
+		"group_namespace_id": group.NamespaceID,
+		"policies":           group.Policies,
+		"type":               group.Type,
+		"parent_group_ids":   group.ParentGroupIDs,
+		"member_entity_ids":  group.MemberEntityIDs,
+		"metadata":           group.Metadata,
+		"creation_time":      group.CreationTime.AsTime().Format(time.RFC3339),
+		"last_update_time":   group.LastUpdateTime.AsTime().Format(time.RFC3339),
+		"is_new_group":       groupRaw == nil,
+	})
+	if err != nil {
+		i.logger.Error("failed to record observation for group upsert", "error", err)
+	}
+
 	return nil
 }
 
@@ -2243,6 +2422,21 @@ func (i *IdentityStore) MemDBDeleteGroupByIDInTxn(txn *memdb.Txn, groupID string
 	err = txn.Delete("groups", group)
 	if err != nil {
 		return fmt.Errorf("failed to delete group from memdb: %w", err)
+	}
+
+	err = i.Backend.RecordObservation(context.Background(), observations.ObservationTypeGroupDelete, map[string]interface{}{
+		"group_id":           group.ID,
+		"group_namespace_id": group.NamespaceID,
+		"policies":           group.Policies,
+		"type":               group.Type,
+		"parent_group_ids":   group.ParentGroupIDs,
+		"member_entity_ids":  group.MemberEntityIDs,
+		"metadata":           group.Metadata,
+		"creation_time":      group.CreationTime.AsTime().Format(time.RFC3339),
+		"last_update_time":   group.LastUpdateTime.AsTime().Format(time.RFC3339),
+	})
+	if err != nil {
+		i.logger.Error("failed to record observation for group deletion", "error", err)
 	}
 
 	return nil

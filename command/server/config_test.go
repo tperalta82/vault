@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package server
@@ -95,6 +95,15 @@ func TestUnknownFieldValidationListenerAndStorage(t *testing.T) {
 	testUnknownFieldValidationStorageAndListener(t)
 }
 
+// Test_ReportingScanDirectory makes sure that the reporting scan directory is correctly parsed
+func Test_ReportingScanDirectory(t *testing.T) {
+	config, err := LoadConfigFile("./test-fixtures/reporting_directory.hcl")
+	require.NoError(t, err)
+	require.NotNil(t, config)
+	require.NotEmpty(t, config.ReportingScanDirectory)
+	require.Equal(t, "/foo/bar/", config.ReportingScanDirectory)
+}
+
 // Test_ObservationSystemConfig makes sure that the observation system config
 // is properly loaded.
 func Test_ObservationSystemConfig(t *testing.T) {
@@ -137,6 +146,27 @@ func Test_ObservationSystemConfigMerge(t *testing.T) {
 	require.Equal(t, []string{"deny1", "deny2"}, merged.Observations.TypePrefixDenylist)
 	require.Equal(t, []string{"allow1", "allow2", "allow3"}, merged.Observations.TypePrefixAllowlist)
 	require.Equal(t, "0777", merged.Observations.FileMode)
+}
+
+// Test_ObservationSystemConfigMergeFromNoObservations checks merge for observation system config from a config
+// without an observation system defined
+func Test_ObservationSystemConfigMergeFromNoObservations(t *testing.T) {
+	config, err := LoadConfigFile("./test-fixtures/config.hcl")
+	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	config2, err := LoadConfigFile("./test-fixtures/observations_allow_deny.hcl")
+	require.NoError(t, err)
+	require.NotNil(t, config2)
+
+	merged := config.Merge(config2)
+	require.NotNil(t, merged)
+	require.NotNil(t, merged.Observations)
+	require.Equal(t, "/var/ledger.log", merged.Observations.LedgerPath)
+	require.Equal(t, []string{"deny1", "deny2"}, merged.Observations.TypePrefixDenylist)
+	require.Equal(t, []string{"allow1", "allow2", "allow3"}, merged.Observations.TypePrefixAllowlist)
+	require.Equal(t, "0777", merged.Observations.FileMode)
+	require.Equal(t, true, merged.EnableUI)
 }
 
 // TestDuplicateKeyValidationHcl checks that the server command displays a warning when the HCL config file contains duplicate keys.

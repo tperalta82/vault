@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -20,6 +20,7 @@ interface Args {
   statuses: Array<LdapLibraryAccountStatus>;
   showLibraryColumn: boolean;
   onCheckInSuccess: CallableFunction;
+  isLoadingStatuses?: boolean;
 }
 
 export default class LdapAccountsCheckedOutComponent extends Component<Args> {
@@ -40,7 +41,7 @@ export default class LdapAccountsCheckedOutComponent extends Component<Args> {
     // filter status to only show checked out accounts associated to the current user
     // if disable_check_in_enforcement is true on the library set then all checked out accounts are displayed
     return this.args.statuses.filter((status) => {
-      const authEntityId = this.auth.authData?.entity_id;
+      const authEntityId = this.auth.authData?.entityId;
       const isRoot = !status.borrower_entity_id && !authEntityId; // root user will not have an entity id and it won't be populated on status
       const isEntity = status.borrower_entity_id === authEntityId;
       const library = this.findLibrary(status.library);
@@ -55,7 +56,7 @@ export default class LdapAccountsCheckedOutComponent extends Component<Args> {
   };
 
   findLibrary(name: string): LdapLibraryModel {
-    return this.args.libraries.find((library) => library.name === name) as LdapLibraryModel;
+    return this.args.libraries.find((library) => library.completeLibraryName === name) as LdapLibraryModel;
   }
 
   @task

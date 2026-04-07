@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package awsauth
@@ -602,6 +602,7 @@ func TestAwsEc2_RoleCrud(t *testing.T) {
 	}
 
 	expected := map[string]interface{}{
+		"alias_metadata":                 map[string]string{},
 		"auth_type":                      ec2AuthType,
 		"bound_ami_id":                   []string{"testamiid"},
 		"bound_account_id":               []string{"testaccountid"},
@@ -635,7 +636,7 @@ func TestAwsEc2_RoleCrud(t *testing.T) {
 	}
 
 	if resp.Data["role_id"] == nil {
-		t.Fatal("role_id not found in repsonse")
+		t.Fatal("role_id not found in response")
 	}
 	expected["role_id"] = resp.Data["role_id"]
 	if diff := deep.Equal(expected, resp.Data); diff != nil {

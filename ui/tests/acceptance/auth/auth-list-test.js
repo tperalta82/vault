@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -12,7 +12,6 @@ import { login, loginNs } from 'vault/tests/helpers/auth/auth-helpers';
 import { MANAGED_AUTH_BACKENDS } from 'vault/helpers/supported-managed-auth-backends';
 import { deleteAuthCmd, mountAuthCmd, runCmd, createNS } from 'vault/tests/helpers/commands';
 import { GENERAL } from 'vault/tests/helpers/general-selectors';
-import { MOUNT_BACKEND_FORM } from 'vault/tests/helpers/components/mount-backend-form-selectors';
 import { filterEnginesByMountCategory } from 'vault/utils/all-engines-metadata';
 
 const SELECTORS = {
@@ -26,21 +25,15 @@ module('Acceptance | auth backend list', function (hooks) {
 
   hooks.beforeEach(async function () {
     await login();
+  });
+
+  test('userpass secret backend', async function (assert) {
     this.path1 = `userpass-${uuidv4()}`;
     this.path2 = `userpass-${uuidv4()}`;
     this.user1 = 'user1';
     this.user2 = 'user2';
 
     await runCmd([mountAuthCmd('userpass', this.path1), mountAuthCmd('userpass', this.path2)], false);
-  });
-
-  hooks.afterEach(async function () {
-    await login();
-    await runCmd([deleteAuthCmd(this.path1), deleteAuthCmd(this.path2)], false);
-    return;
-  });
-
-  test('userpass secret backend', async function (assert) {
     // helper function to create a user in the specified backend
     async function createUser(backendPath, username) {
       await click(GENERAL.linkedBlock(backendPath));
@@ -69,6 +62,9 @@ module('Acceptance | auth backend list', function (hooks) {
     await click(SELECTORS.methods);
     await click(GENERAL.linkedBlock(this.path1));
     assert.dom(SELECTORS.listItem).hasText(this.user1, 'user1 exists in the list');
+
+    await login();
+    await runCmd([deleteAuthCmd(this.path1), deleteAuthCmd(this.path2)], false);
   });
 
   module('auth methods are linkable and link to correct view', function (hooks) {
@@ -89,7 +85,7 @@ module('Acceptance | auth backend list', function (hooks) {
           // Enable auth if the backend is not type token
           if (!isTokenType) {
             await visit('/vault/settings/auth/enable');
-            await click(MOUNT_BACKEND_FORM.mountType(type));
+            await click(GENERAL.cardContainer(type));
             await fillIn(GENERAL.inputByAttr('path'), path);
             await click(GENERAL.submitButton);
           }

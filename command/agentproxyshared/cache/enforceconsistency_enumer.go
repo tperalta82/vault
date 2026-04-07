@@ -4,11 +4,14 @@ package cache
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _EnforceConsistencyName = "NeverAlways"
 
 var _EnforceConsistencyIndex = [...]uint8{0, 5, 11}
+
+const _EnforceConsistencyLowerName = "neveralways"
 
 func (i EnforceConsistency) String() string {
 	if i < 0 || i >= EnforceConsistency(len(_EnforceConsistencyIndex)-1) {
@@ -17,11 +20,26 @@ func (i EnforceConsistency) String() string {
 	return _EnforceConsistencyName[_EnforceConsistencyIndex[i]:_EnforceConsistencyIndex[i+1]]
 }
 
-var _EnforceConsistencyValues = []EnforceConsistency{0, 1}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _EnforceConsistencyNoOp() {
+	var x [1]struct{}
+	_ = x[EnforceConsistencyNever-(0)]
+	_ = x[EnforceConsistencyAlways-(1)]
+}
+
+var _EnforceConsistencyValues = []EnforceConsistency{EnforceConsistencyNever, EnforceConsistencyAlways}
 
 var _EnforceConsistencyNameToValueMap = map[string]EnforceConsistency{
-	_EnforceConsistencyName[0:5]:  0,
-	_EnforceConsistencyName[5:11]: 1,
+	_EnforceConsistencyName[0:5]:       EnforceConsistencyNever,
+	_EnforceConsistencyLowerName[0:5]:  EnforceConsistencyNever,
+	_EnforceConsistencyName[5:11]:      EnforceConsistencyAlways,
+	_EnforceConsistencyLowerName[5:11]: EnforceConsistencyAlways,
+}
+
+var _EnforceConsistencyNames = []string{
+	_EnforceConsistencyName[0:5],
+	_EnforceConsistencyName[5:11],
 }
 
 // EnforceConsistencyString retrieves an enum value from the enum constants string name.
@@ -30,12 +48,23 @@ func EnforceConsistencyString(s string) (EnforceConsistency, error) {
 	if val, ok := _EnforceConsistencyNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _EnforceConsistencyNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to EnforceConsistency values", s)
 }
 
 // EnforceConsistencyValues returns all values of the enum
 func EnforceConsistencyValues() []EnforceConsistency {
 	return _EnforceConsistencyValues
+}
+
+// EnforceConsistencyStrings returns a slice of all String values of the enum
+func EnforceConsistencyStrings() []string {
+	strs := make([]string, len(_EnforceConsistencyNames))
+	copy(strs, _EnforceConsistencyNames)
+	return strs
 }
 
 // IsAEnforceConsistency returns "true" if the value is listed in the enum definition. "false" otherwise

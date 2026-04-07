@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package github
@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	libgit "github.com/hashicorp/vault/tools/pipeline/internal/pkg/git"
+	libgit "github.com/hashicorp/vault/tools/pipeline/internal/pkg/git/client"
 	slogctx "github.com/veqryn/slog-context"
 )
 

@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: MPL-2.0
 
 package docker
@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"maps"
 	"math/big"
 	mathrand "math/rand"
 	"net"
@@ -33,7 +34,6 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/volume"
 	docker "github.com/docker/docker/client"
 	"github.com/hashicorp/go-cleanhttp"
@@ -79,6 +79,7 @@ type DockerCluster struct {
 
 	storage      testcluster.ClusterStorage
 	disableMlock bool
+	disableTLS   bool
 }
 
 func (dc *DockerCluster) NamedLogger(s string) log.Logger {
@@ -134,6 +135,9 @@ func (dc *DockerCluster) SetRecoveryKeys(keys [][]byte) {
 }
 
 func (dc *DockerCluster) GetCACertPEMFile() string {
+	if dc.disableTLS {
+		return ""
+	}
 	return testcluster.DefaultCAFile
 }
 
@@ -449,6 +453,7 @@ func NewDockerCluster(ctx context.Context, opts *DockerClusterOptions) (*DockerC
 		CA:           opts.CA,
 		storage:      opts.Storage,
 		disableMlock: opts.DisableMlock,
+		disableTLS:   opts.DisableTLS,
 	}
 
 	if err := dc.setupDockerCluster(ctx, opts); err != nil {
@@ -657,6 +662,11 @@ func (n *DockerClusterNode) Start(ctx context.Context, opts *DockerClusterOption
 		defaultListenerConfig = n.createDefaultListenerConfig()
 	}
 
+	// Merge custom listener config options to default config
+	if opts.VaultNodeConfig != nil && opts.VaultNodeConfig.CustomListenerConfigOpts != nil {
+		maps.Copy(defaultListenerConfig["tcp"].(map[string]interface{}), opts.VaultNodeConfig.CustomListenerConfigOpts)
+	}
+
 	listenerConfig = append(listenerConfig, defaultListenerConfig)
 	ports := []string{"8200/tcp", "8201/tcp"}
 
@@ -778,12 +788,23 @@ func (n *DockerClusterNode) Start(ctx context.Context, opts *DockerClusterOption
 		}
 		n.Logger.Trace(s)
 	}
+	// If a container gets restarted, and we reissue a ContainerLogs call using
+	// Follow=true, we'll see all the logs already consumed before we start seeing
+	// new ones.  Use lastTS to avoid duplication.
+	lastTS := ""
 	logStdout := &LogConsumerWriter{logConsumer}
 	logStderr := &LogConsumerWriter{func(s string) {
 		if seenLogs.CAS(false, true) {
 			wg.Done()
 		}
-		testcluster.JSONLogNoTimestamp(n.Logger, s)
+		d := json.NewDecoder(strings.NewReader(s))
+		m := map[string]any{}
+		if err := d.Decode(&m); err != nil {
+			n.Logger.Error("failed to decode json output from dev vault", "error", err, "input", s)
+			return
+		}
+
+		lastTS = testcluster.JSONLogNoTimestampFromMap(n.Logger, lastTS, m)
 	}}
 
 	postStartFunc := func(containerID string, realIP string) error {
@@ -920,7 +941,7 @@ func (n *DockerClusterNode) Pause(ctx context.Context) error {
 
 func (n *DockerClusterNode) Restart(ctx context.Context) error {
 	timeout := 5
-	err := n.DockerAPI.ContainerRestart(ctx, n.Container.ID, container.StopOptions{Timeout: &timeout})
+	err := n.runner.RestartContainerWithTimeout(ctx, n.Container.ID, timeout)
 	if err != nil {
 		return err
 	}
@@ -1323,6 +1344,28 @@ func (dc *DockerCluster) GetActiveClusterNode() *DockerClusterNode {
 	}
 
 	return dc.ClusterNodes[node]
+}
+
+func (dc *DockerCluster) GetActiveAndStandbys() (*DockerClusterNode, []*DockerClusterNode) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	activeIndex, err := testcluster.WaitForActiveNode(ctx, dc)
+	if err != nil {
+		panic(fmt.Sprintf("no cluster node became active in timeout window: %v", err))
+	}
+
+	var leaderNode *DockerClusterNode
+	var standbyNodes []*DockerClusterNode
+	for i, node := range dc.ClusterNodes {
+		if i == activeIndex {
+			leaderNode = node
+			continue
+		}
+		standbyNodes = append(standbyNodes, node)
+	}
+
+	return leaderNode, standbyNodes
 }
 
 /* Notes on testing the non-bridge network case:

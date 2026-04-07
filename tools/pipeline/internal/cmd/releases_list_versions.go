@@ -1,10 +1,9 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
@@ -45,7 +44,7 @@ func newReleasesVersionsBetweenCmd() *cobra.Command {
 func runListVersionsReq(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true // Don't spam the usage on failure
 
-	res, err := listReleaseVersionsReq.Run(context.TODO())
+	res, err := listReleaseVersionsReq.Run(cmd.Context())
 	if err != nil {
 		return err
 	}

@@ -1,11 +1,11 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
 import { AUTH_FORM } from 'vault/tests/helpers/auth/auth-form-selectors';
 import { click, fillIn, waitUntil } from '@ember/test-helpers';
-import { ERROR_JWT_LOGIN } from 'vault/components/auth/form/oidc-jwt';
+import { ERROR_JWT_LOGIN } from 'vault/utils/auth-form-helpers';
 import { fillInLoginFields } from 'vault/tests/helpers/auth/auth-helpers';
 import { GENERAL } from 'vault/tests/helpers/general-selectors';
 import { module, test } from 'qunit';
@@ -49,7 +49,7 @@ const methodAuthenticationTests = (test) => {
     assert.strictEqual(persistedTokenData.entity_id, entity_id, 'setTokenData has expected entity_id');
   });
 
-  test('it calls onAuthSuccess on submit for custom path', async function (assert) {
+  test('it calls loginAndTransition on submit for custom path', async function (assert) {
     assert.expect(1);
     // Setup
     this.path = `${this.authType}-custom`;
@@ -65,10 +65,10 @@ const methodAuthenticationTests = (test) => {
     }
     await click(GENERAL.submitButton);
 
-    await waitUntil(() => this.onAuthSuccess.calledOnce);
-    const [actual] = this.onAuthSuccess.lastCall.args;
+    await waitUntil(() => this.loginAndTransition.perform.calledOnce);
+    const [actual] = this.loginAndTransition.perform.lastCall.args;
     const expected = { namespace: '', token: this.tokenName, isRoot: false };
-    assert.propEqual(actual, expected, `onAuthSuccess called with: ${JSON.stringify(actual)}`);
+    assert.propEqual(actual, expected, `loginAndTransition task called with: ${JSON.stringify(actual)}`);
   });
 };
 
@@ -150,7 +150,7 @@ module('Integration | Component | auth | page | method authentication', function
       this.loginData = { role: 'some-dev' };
       this.path = this.authType;
       this.response = RESPONSE_STUBS.oidc['oidc/callback'];
-      this.tokenName = 'vault-token☃1';
+      this.tokenName = 'vault-oidc☃1';
       // Requests are stubbed in the order they are hit
       this.stubRequests = () => {
         this.server.post(`/auth/${this.path}/oidc/auth_url`, () => {
@@ -210,16 +210,16 @@ module('Integration | Component | auth | page | method authentication', function
       this.server.get('/auth/token/lookup-self', () => RESPONSE_STUBS.token);
     });
 
-    test('it sets token data and calls onAuthSuccess', async function (assert) {
+    test('it sets token data and calls loginAndTransition', async function (assert) {
       assert.expect(6);
       await this.renderComponent();
       await fillIn(AUTH_FORM.selectMethod, this.authType);
       await fillInLoginFields({ token: 'mysupersecuretoken' });
       await click(GENERAL.submitButton);
-
-      const [actual] = this.onAuthSuccess.lastCall.args;
+      await waitUntil(() => this.loginAndTransition.perform.calledOnce);
+      const [actual] = this.loginAndTransition.perform.lastCall.args;
       const expected = { namespace: '', token: this.tokenName, isRoot: false };
-      assert.propEqual(actual, expected, `onAuthSuccess called with: ${JSON.stringify(actual)}`);
+      assert.propEqual(actual, expected, `loginAndTransition task called with: ${JSON.stringify(actual)}`);
 
       const [tokenName, persistedTokenData] = this.setTokenDataSpy.lastCall.args;
       const expectedTokenData = {
@@ -265,16 +265,16 @@ module('Integration | Component | auth | page | method authentication', function
       this.path = this.authType;
       this.loginData = { role: 'some-dev' };
       this.response = RESPONSE_STUBS.saml['saml/token'];
-      this.tokenName = 'vault-token☃1';
+      this.tokenName = 'vault-saml☃1';
       // Requests are stubbed in the order they are hit
       this.stubRequests = () => {
-        this.server.put(`/auth/${this.path}/sso_service_url`, () => ({
+        this.server.post(`/auth/${this.path}/sso_service_url`, () => ({
           data: {
             sso_service_url: 'test/fake/sso/route',
             token_poll_id: '1234',
           },
         }));
-        this.server.put(`/auth/${this.path}/token`, () => this.response);
+        this.server.post(`/auth/${this.path}/token`, () => this.response);
         this.server.get(`/auth/token/lookup-self`, () => RESPONSE_STUBS.saml['lookup-self']);
       };
       this.windowStub = windowStub();

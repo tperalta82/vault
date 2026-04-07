@@ -4,11 +4,14 @@ package logical
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _KeyUsageName = "encryptdecryptsignverifywrapunwrapgenerate_random"
 
 var _KeyUsageIndex = [...]uint8{0, 7, 14, 18, 24, 28, 34, 49}
+
+const _KeyUsageLowerName = "encryptdecryptsignverifywrapunwrapgenerate_random"
 
 func (i KeyUsage) String() string {
 	i -= 1
@@ -18,16 +21,46 @@ func (i KeyUsage) String() string {
 	return _KeyUsageName[_KeyUsageIndex[i]:_KeyUsageIndex[i+1]]
 }
 
-var _KeyUsageValues = []KeyUsage{1, 2, 3, 4, 5, 6, 7}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _KeyUsageNoOp() {
+	var x [1]struct{}
+	_ = x[KeyUsageEncrypt-(1)]
+	_ = x[KeyUsageDecrypt-(2)]
+	_ = x[KeyUsageSign-(3)]
+	_ = x[KeyUsageVerify-(4)]
+	_ = x[KeyUsageWrap-(5)]
+	_ = x[KeyUsageUnwrap-(6)]
+	_ = x[KeyUsageGenerateRandom-(7)]
+}
+
+var _KeyUsageValues = []KeyUsage{KeyUsageEncrypt, KeyUsageDecrypt, KeyUsageSign, KeyUsageVerify, KeyUsageWrap, KeyUsageUnwrap, KeyUsageGenerateRandom}
 
 var _KeyUsageNameToValueMap = map[string]KeyUsage{
-	_KeyUsageName[0:7]:   1,
-	_KeyUsageName[7:14]:  2,
-	_KeyUsageName[14:18]: 3,
-	_KeyUsageName[18:24]: 4,
-	_KeyUsageName[24:28]: 5,
-	_KeyUsageName[28:34]: 6,
-	_KeyUsageName[34:49]: 7,
+	_KeyUsageName[0:7]:        KeyUsageEncrypt,
+	_KeyUsageLowerName[0:7]:   KeyUsageEncrypt,
+	_KeyUsageName[7:14]:       KeyUsageDecrypt,
+	_KeyUsageLowerName[7:14]:  KeyUsageDecrypt,
+	_KeyUsageName[14:18]:      KeyUsageSign,
+	_KeyUsageLowerName[14:18]: KeyUsageSign,
+	_KeyUsageName[18:24]:      KeyUsageVerify,
+	_KeyUsageLowerName[18:24]: KeyUsageVerify,
+	_KeyUsageName[24:28]:      KeyUsageWrap,
+	_KeyUsageLowerName[24:28]: KeyUsageWrap,
+	_KeyUsageName[28:34]:      KeyUsageUnwrap,
+	_KeyUsageLowerName[28:34]: KeyUsageUnwrap,
+	_KeyUsageName[34:49]:      KeyUsageGenerateRandom,
+	_KeyUsageLowerName[34:49]: KeyUsageGenerateRandom,
+}
+
+var _KeyUsageNames = []string{
+	_KeyUsageName[0:7],
+	_KeyUsageName[7:14],
+	_KeyUsageName[14:18],
+	_KeyUsageName[18:24],
+	_KeyUsageName[24:28],
+	_KeyUsageName[28:34],
+	_KeyUsageName[34:49],
 }
 
 // KeyUsageString retrieves an enum value from the enum constants string name.
@@ -36,12 +69,23 @@ func KeyUsageString(s string) (KeyUsage, error) {
 	if val, ok := _KeyUsageNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _KeyUsageNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to KeyUsage values", s)
 }
 
 // KeyUsageValues returns all values of the enum
 func KeyUsageValues() []KeyUsage {
 	return _KeyUsageValues
+}
+
+// KeyUsageStrings returns a slice of all String values of the enum
+func KeyUsageStrings() []string {
+	strs := make([]string, len(_KeyUsageNames))
+	copy(strs, _KeyUsageNames)
+	return strs
 }
 
 // IsAKeyUsage returns "true" if the value is listed in the enum definition. "false" otherwise

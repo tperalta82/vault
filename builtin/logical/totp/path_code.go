@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package totp
@@ -6,6 +6,7 @@ package totp
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/vault/sdk/framework"
@@ -76,6 +77,10 @@ func (b *backend) pathReadCode(ctx context.Context, req *logical.Request, data *
 		return nil, err
 	}
 
+	b.TryRecordObservationWithRequest(ctx, req, ObservationTypeTOTPCodeGenerate, map[string]interface{}{
+		"key_name": name,
+	})
+
 	// Return the secret
 	return &logical.Response{
 		Data: map[string]interface{}{
@@ -86,7 +91,7 @@ func (b *backend) pathReadCode(ctx context.Context, req *logical.Request, data *
 
 func (b *backend) pathValidateCode(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
 	name := data.Get("name").(string)
-	code := data.Get("code").(string)
+	code := strings.TrimSpace(data.Get("code").(string))
 
 	// Enforce input value requirements
 	if code == "" {
@@ -118,6 +123,11 @@ func (b *backend) pathValidateCode(ctx context.Context, req *logical.Request, da
 	if err != nil && err != otplib.ErrValidateInputInvalidLength {
 		return logical.ErrorResponse("an error occurred while validating the code"), err
 	}
+
+	b.TryRecordObservationWithRequest(ctx, req, ObservationTypeTOTPCodeValidate, map[string]interface{}{
+		"key_name": name,
+		"valid":    valid,
+	})
 
 	// Take the key skew, add two for behind and in front, and multiple that by
 	// the period to cover the full possibility of the validity of the key

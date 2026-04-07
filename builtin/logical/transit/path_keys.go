@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package transit
@@ -299,6 +299,10 @@ func (b *backend) pathPolicyWrite(ctx context.Context, req *logical.Request, d *
 		default:
 			return logical.ErrorResponse(fmt.Sprintf("invalid parameter set %s for key type %s", parameterSet, keyType)), logical.ErrInvalidRequest
 		}
+	case "aes128-cbc":
+		polReq.KeyType = keysutil.KeyType_AES128_CBC
+	case "aes256-cbc":
+		polReq.KeyType = keysutil.KeyType_AES256_CBC
 	default:
 		return logical.ErrorResponse(fmt.Sprintf("unknown key type %v", keyType)), logical.ErrInvalidRequest
 	}
@@ -321,12 +325,8 @@ func (b *backend) pathPolicyWrite(ctx context.Context, req *logical.Request, d *
 		polReq.ManagedKeyUUID = keyId
 	}
 
-	if polReq.KeyType.CMACSupported() && !constants.IsEnterprise {
-		return logical.ErrorResponse(ErrCmacEntOnly.Error()), logical.ErrInvalidRequest
-	}
-
-	if polReq.KeyType.IsPQC() && !constants.IsEnterprise {
-		return logical.ErrorResponse(ErrPQCEntOnly.Error()), logical.ErrInvalidRequest
+	if polReq.KeyType.IsEnterpriseOnly() && !constants.IsEnterprise {
+		return logical.ErrorResponse(fmt.Sprintf(ErrKeyTypeEntOnly, polReq.KeyType)), logical.ErrInvalidRequest
 	}
 
 	p, upserted, err := b.GetPolicy(ctx, polReq, b.GetRandomReader())
@@ -348,6 +348,12 @@ func (b *backend) pathPolicyWrite(ctx context.Context, req *logical.Request, d *
 	if !upserted {
 		resp.AddWarning(fmt.Sprintf("key %s already existed", name))
 	}
+
+	metadata := b.keyPolicyObservationMetadata(p)
+	if polReq.ManagedKeyUUID != "" {
+		metadata["managed_key_id"] = polReq.ManagedKeyUUID
+	}
+	b.TryRecordObservationWithRequest(ctx, req, ObservationTypeTransitKeyWrite, metadata)
 	return resp, nil
 }
 
@@ -387,7 +393,49 @@ func (b *backend) pathPolicyRead(ctx context.Context, req *logical.Request, d *f
 		}
 	}
 
+	b.TryRecordObservationWithRequest(ctx, req, ObservationTypeTransitKeyRead, b.keyPolicyObservationMetadata(p))
 	return b.formatKeyPolicy(p, context)
+}
+
+func (b *backend) keyPolicyObservationMetadata(p *keysutil.Policy) map[string]interface{} {
+	metadata := map[string]interface{}{
+		"key_name":               p.Name,
+		"type":                   p.Type.String(),
+		"derived":                p.Derived,
+		"deletion_allowed":       p.DeletionAllowed,
+		"min_available_version":  p.MinAvailableVersion,
+		"min_decryption_version": p.MinDecryptionVersion,
+		"min_encryption_version": p.MinEncryptionVersion,
+		"latest_version":         p.LatestVersion,
+		"exportable":             p.Exportable,
+		"allow_plaintext_backup": p.AllowPlaintextBackup,
+		"auto_rotate_period":     int64(p.AutoRotatePeriod.Seconds()),
+		"imported_key":           p.Imported,
+	}
+
+	if p.Derived {
+		switch p.KDF {
+		case keysutil.Kdf_hmac_sha256_counter:
+			metadata["kdf"] = "hmac-sha256-counter"
+			metadata["kdf_mode"] = "hmac-sha256-counter"
+		case keysutil.Kdf_hkdf_sha256:
+			metadata["kdf"] = "hkdf_sha256"
+		}
+		metadata["convergent_encryption"] = p.ConvergentEncryption
+		if p.ConvergentEncryption {
+			metadata["convergent_encryption_version"] = p.ConvergentVersion
+		}
+	}
+
+	if p.ParameterSet != "" {
+		metadata["parameter_set"] = p.ParameterSet
+	}
+
+	if p.Type == keysutil.KeyType_HYBRID {
+		metadata["hybrid_key_type_pqc"] = p.HybridConfig.PQCKeyType.String()
+		metadata["hybrid_key_type_ec"] = p.HybridConfig.ECKeyType.String()
+	}
+	return metadata
 }
 
 func (b *backend) formatKeyPolicy(p *keysutil.Policy, context []byte) (*logical.Response, error) {
@@ -457,7 +505,7 @@ func (b *backend) formatKeyPolicy(p *keysutil.Policy, context []byte) (*logical.
 	}
 
 	switch p.Type {
-	case keysutil.KeyType_AES128_GCM96, keysutil.KeyType_AES256_GCM96, keysutil.KeyType_ChaCha20_Poly1305:
+	case keysutil.KeyType_AES128_GCM96, keysutil.KeyType_AES256_GCM96, keysutil.KeyType_ChaCha20_Poly1305, keysutil.KeyType_AES128_CBC, keysutil.KeyType_AES256_CBC:
 		retKeys := map[string]int64{}
 		for k, v := range p.Keys {
 			retKeys[k] = v.DeprecatedCreationTime
@@ -548,6 +596,9 @@ func (b *backend) pathPolicyDelete(ctx context.Context, req *logical.Request, d 
 		return logical.ErrorResponse(fmt.Sprintf("error deleting policy %s: %s", name, err)), err
 	}
 
+	b.TryRecordObservationWithRequest(ctx, req, ObservationTypeTransitKeyDelete, map[string]interface{}{
+		"key_name": name,
+	})
 	return nil, nil
 }
 

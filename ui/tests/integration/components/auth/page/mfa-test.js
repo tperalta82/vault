@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -8,7 +8,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import { setupMirage } from 'ember-cli-mirage/test-support';
 import { constraintId, setupTotpMfaResponse } from 'vault/tests/helpers/mfa/mfa-helpers';
 import setupTestContext from './setup-test-context';
-import { ERROR_JWT_LOGIN } from 'vault/components/auth/form/oidc-jwt';
+import { ERROR_JWT_LOGIN } from 'vault/utils/auth-form-helpers';
 import { overrideResponse } from 'vault/tests/helpers/stubs';
 import sinon from 'sinon';
 import { triggerMessageEvent, windowStub } from 'vault/tests/helpers/oidc-window-stub';
@@ -21,7 +21,7 @@ import { click, fillIn, waitFor } from '@ember/test-helpers';
 const mfaTests = (test) => {
   test('it displays mfa requirement for default paths', async function (assert) {
     const loginKeys = Object.keys(this.loginData);
-    assert.expect(3 + loginKeys.length);
+    assert.expect(5 + loginKeys.length);
     this.stubRequests();
     await this.renderComponent();
 
@@ -37,12 +37,10 @@ const mfaTests = (test) => {
 
     await click(GENERAL.submitButton);
     await waitFor(MFA_SELECTORS.mfaForm);
-    assert
-      .dom(MFA_SELECTORS.mfaForm)
-      .hasText(
-        'Back Multi-factor authentication is enabled for your account. Enter your authentication code to log in. TOTP passcode Verify'
-      );
-    await click(GENERAL.backButton);
+    assert.dom(GENERAL.title).hasText('Verify your identity');
+    assert.dom(MFA_SELECTORS.subheader).hasText('Multi-factor authentication is enabled for your account.');
+    assert.dom(MFA_SELECTORS.description).hasText('Enter your authentication code to log in.');
+    await click(GENERAL.cancelButton);
     assert.dom(AUTH_FORM.form).exists('clicking back returns to auth form');
     assert.dom(AUTH_FORM.selectMethod).hasValue(this.authType, 'preserves method type on back');
     for (const field of loginKeys) {
@@ -53,7 +51,7 @@ const mfaTests = (test) => {
   test('it displays mfa requirement for custom paths', async function (assert) {
     this.path = `${this.authType}-custom`;
     const loginKeys = Object.keys(this.loginData);
-    assert.expect(3 + loginKeys.length);
+    assert.expect(5 + loginKeys.length);
     this.stubRequests();
     await this.renderComponent();
 
@@ -69,12 +67,10 @@ const mfaTests = (test) => {
 
     await click(GENERAL.submitButton);
     await waitFor(MFA_SELECTORS.mfaForm);
-    assert
-      .dom(MFA_SELECTORS.mfaForm)
-      .hasText(
-        'Back Multi-factor authentication is enabled for your account. Enter your authentication code to log in. TOTP passcode Verify'
-      );
-    await click(GENERAL.backButton);
+    assert.dom(GENERAL.title).hasText('Verify your identity');
+    assert.dom(MFA_SELECTORS.subheader).hasText('Multi-factor authentication is enabled for your account.');
+    assert.dom(MFA_SELECTORS.description).hasText('Enter your authentication code to log in.');
+    await click(GENERAL.cancelButton);
     assert.dom(AUTH_FORM.form).exists('clicking back returns to auth form');
     assert.dom(AUTH_FORM.selectMethod).hasValue(this.authType, 'preserves method type on back');
     for (const field of loginKeys) {
@@ -106,7 +102,7 @@ const mfaTests = (test) => {
     await click(GENERAL.submitButton);
     await waitFor(MFA_SELECTORS.mfaForm);
     await fillIn(MFA_SELECTORS.passcode(0), expectedOtp);
-    await click(MFA_SELECTORS.validate);
+    await click(GENERAL.button('Verify'));
   });
 
   test('it submits mfa requirement for custom paths', async function (assert) {
@@ -134,7 +130,7 @@ const mfaTests = (test) => {
     await click(GENERAL.submitButton);
     await waitFor(MFA_SELECTORS.mfaForm);
     await fillIn(MFA_SELECTORS.passcode(0), expectedOtp);
-    await click(MFA_SELECTORS.validate);
+    await click(GENERAL.button('Verify'));
   });
 };
 
@@ -144,6 +140,12 @@ module('Integration | Component | auth | page | mfa', function (hooks) {
 
   hooks.beforeEach(async function () {
     setupTestContext(this);
+    // additional setup for oidc-jwt component
+    this.routerStub = sinon.stub(this.owner.lookup('service:router'), 'urlFor').returns('123-example.com');
+  });
+
+  hooks.afterEach(function () {
+    this.routerStub.restore();
   });
 
   module('github', function (hooks) {
@@ -164,7 +166,6 @@ module('Integration | Component | auth | page | mfa', function (hooks) {
       this.authType = 'jwt';
       this.loginData = { role: 'some-dev', jwt: 'jwttoken' };
       this.path = this.authType;
-      this.routerStub = sinon.stub(this.owner.lookup('service:router'), 'urlFor').returns('123-example.com');
 
       this.stubRequests = () => {
         this.server.post('/auth/:path/oidc/auth_url', () =>
@@ -172,10 +173,6 @@ module('Integration | Component | auth | page | mfa', function (hooks) {
         );
         this.server.post(`/auth/${this.path}/login`, () => setupTotpMfaResponse(this.path));
       };
-    });
-
-    hooks.afterEach(function () {
-      this.routerStub.restore();
     });
 
     mfaTests(test);
@@ -194,13 +191,10 @@ module('Integration | Component | auth | page | mfa', function (hooks) {
         this.server.get(`/auth/${this.path}/oidc/callback`, () => setupTotpMfaResponse(this.path));
       };
 
-      // additional OIDC setup
-      this.routerStub = sinon.stub(this.owner.lookup('service:router'), 'urlFor').returns('123-example.com');
       this.windowStub = windowStub();
     });
 
     hooks.afterEach(function () {
-      this.routerStub.restore();
       this.windowStub.restore();
     });
 
@@ -261,13 +255,13 @@ module('Integration | Component | auth | page | mfa', function (hooks) {
       this.loginData = { role: 'some-dev' };
       // Requests are stubbed in the order they are hit
       this.stubRequests = () => {
-        this.server.put(`/auth/${this.path}/sso_service_url`, () => ({
+        this.server.post(`/auth/${this.path}/sso_service_url`, () => ({
           data: {
             sso_service_url: 'test/fake/sso/route',
             token_poll_id: '1234',
           },
         }));
-        this.server.put(`/auth/${this.path}/token`, () => setupTotpMfaResponse(this.authType));
+        this.server.post(`/auth/${this.path}/token`, () => setupTotpMfaResponse(this.authType));
       };
       this.windowStub = windowStub();
     });

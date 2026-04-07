@@ -4,11 +4,14 @@ package vault
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _clientTypeName = "confidentialpublic"
 
 var _clientTypeIndex = [...]uint8{0, 12, 18}
+
+const _clientTypeLowerName = "confidentialpublic"
 
 func (i clientType) String() string {
 	if i < 0 || i >= clientType(len(_clientTypeIndex)-1) {
@@ -17,11 +20,26 @@ func (i clientType) String() string {
 	return _clientTypeName[_clientTypeIndex[i]:_clientTypeIndex[i+1]]
 }
 
-var _clientTypeValues = []clientType{0, 1}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _clientTypeNoOp() {
+	var x [1]struct{}
+	_ = x[confidential-(0)]
+	_ = x[public-(1)]
+}
+
+var _clientTypeValues = []clientType{confidential, public}
 
 var _clientTypeNameToValueMap = map[string]clientType{
-	_clientTypeName[0:12]:  0,
-	_clientTypeName[12:18]: 1,
+	_clientTypeName[0:12]:       confidential,
+	_clientTypeLowerName[0:12]:  confidential,
+	_clientTypeName[12:18]:      public,
+	_clientTypeLowerName[12:18]: public,
+}
+
+var _clientTypeNames = []string{
+	_clientTypeName[0:12],
+	_clientTypeName[12:18],
 }
 
 // clientTypeString retrieves an enum value from the enum constants string name.
@@ -30,12 +48,23 @@ func clientTypeString(s string) (clientType, error) {
 	if val, ok := _clientTypeNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _clientTypeNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to clientType values", s)
 }
 
 // clientTypeValues returns all values of the enum
 func clientTypeValues() []clientType {
 	return _clientTypeValues
+}
+
+// clientTypeStrings returns a slice of all String values of the enum
+func clientTypeStrings() []string {
+	strs := make([]string, len(_clientTypeNames))
+	copy(strs, _clientTypeNames)
+	return strs
 }
 
 // IsAclientType returns "true" if the value is listed in the enum definition. "false" otherwise

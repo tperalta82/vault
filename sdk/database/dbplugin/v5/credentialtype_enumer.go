@@ -4,11 +4,14 @@ package dbplugin
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _CredentialTypeName = "passwordrsa_private_keyclient_certificate"
 
 var _CredentialTypeIndex = [...]uint8{0, 8, 23, 41}
+
+const _CredentialTypeLowerName = "passwordrsa_private_keyclient_certificate"
 
 func (i CredentialType) String() string {
 	if i < 0 || i >= CredentialType(len(_CredentialTypeIndex)-1) {
@@ -17,12 +20,30 @@ func (i CredentialType) String() string {
 	return _CredentialTypeName[_CredentialTypeIndex[i]:_CredentialTypeIndex[i+1]]
 }
 
-var _CredentialTypeValues = []CredentialType{0, 1, 2}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _CredentialTypeNoOp() {
+	var x [1]struct{}
+	_ = x[CredentialTypePassword-(0)]
+	_ = x[CredentialTypeRSAPrivateKey-(1)]
+	_ = x[CredentialTypeClientCertificate-(2)]
+}
+
+var _CredentialTypeValues = []CredentialType{CredentialTypePassword, CredentialTypeRSAPrivateKey, CredentialTypeClientCertificate}
 
 var _CredentialTypeNameToValueMap = map[string]CredentialType{
-	_CredentialTypeName[0:8]:   0,
-	_CredentialTypeName[8:23]:  1,
-	_CredentialTypeName[23:41]: 2,
+	_CredentialTypeName[0:8]:        CredentialTypePassword,
+	_CredentialTypeLowerName[0:8]:   CredentialTypePassword,
+	_CredentialTypeName[8:23]:       CredentialTypeRSAPrivateKey,
+	_CredentialTypeLowerName[8:23]:  CredentialTypeRSAPrivateKey,
+	_CredentialTypeName[23:41]:      CredentialTypeClientCertificate,
+	_CredentialTypeLowerName[23:41]: CredentialTypeClientCertificate,
+}
+
+var _CredentialTypeNames = []string{
+	_CredentialTypeName[0:8],
+	_CredentialTypeName[8:23],
+	_CredentialTypeName[23:41],
 }
 
 // CredentialTypeString retrieves an enum value from the enum constants string name.
@@ -31,12 +52,23 @@ func CredentialTypeString(s string) (CredentialType, error) {
 	if val, ok := _CredentialTypeNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _CredentialTypeNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to CredentialType values", s)
 }
 
 // CredentialTypeValues returns all values of the enum
 func CredentialTypeValues() []CredentialType {
 	return _CredentialTypeValues
+}
+
+// CredentialTypeStrings returns a slice of all String values of the enum
+func CredentialTypeStrings() []string {
+	strs := make([]string, len(_CredentialTypeNames))
+	copy(strs, _CredentialTypeNames)
+	return strs
 }
 
 // IsACredentialType returns "true" if the value is listed in the enum definition. "false" otherwise

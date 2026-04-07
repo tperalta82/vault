@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package pki
@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/hashicorp/vault/builtin/logical/pki/issuing"
+	"github.com/hashicorp/vault/builtin/logical/pki/observe"
+	"github.com/hashicorp/vault/builtin/logical/pki/parsing"
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/helper/certutil"
 	"github.com/hashicorp/vault/sdk/helper/strutil"
@@ -159,7 +161,7 @@ func addFieldsForACMEOrder(fields map[string]*framework.FieldSchema) {
 	}
 }
 
-func (b *backend) acmeFetchCertOrderHandler(ac *acmeContext, _ *logical.Request, fields *framework.FieldData, uc *jwsCtx, data map[string]interface{}, _ *acmeAccount) (*logical.Response, error) {
+func (b *backend) acmeFetchCertOrderHandler(ac *acmeContext, req *logical.Request, fields *framework.FieldData, uc *jwsCtx, data map[string]interface{}, _ *acmeAccount) (*logical.Response, error) {
 	orderId := fields.Get("order_id").(string)
 
 	order, err := b.GetAcmeState().LoadOrder(ac, uc, orderId)
@@ -212,6 +214,25 @@ func (b *backend) acmeFetchCertOrderHandler(ac *acmeContext, _ *logical.Request,
 	if err != nil {
 		return nil, fmt.Errorf("failed encoding certificate ca chain: %w", err)
 	}
+
+	var role string
+	var issuerName string
+	var issuerId string
+	if ac.Role != nil {
+		role = ac.Role.Name
+	}
+	if ac.Issuer != nil {
+		issuerId = ac.Issuer.ID.String()
+		issuerName = ac.Issuer.Name
+	}
+	b.pkiObserver.RecordPKIObservation(ac, req, observe.ObservationTypePKIAcmeFetchOrderCert,
+		observe.NewAdditionalPKIMetadata("role_name", role),
+		observe.NewAdditionalPKIMetadata("issuer_name", issuerName),
+		observe.NewAdditionalPKIMetadata("issuer_id", issuerId),
+		observe.NewAdditionalPKIMetadata("order_id", order.OrderId),
+		observe.NewAdditionalPKIMetadata("serial_number", order.CertificateSerialNumber),
+		observe.NewAdditionalPKIMetadata("account_id", order.AccountId),
+	)
 
 	return &logical.Response{
 		Data: map[string]interface{}{
@@ -276,6 +297,7 @@ func (b *backend) acmeFinalizeOrderHandler(ac *acmeContext, r *logical.Request, 
 		if err != nil {
 			return nil, err
 		}
+		b.pkiCertificateCounter.AddIssuedCertificate(true)
 	}
 	hyphenSerialNumber := normalizeSerialFromBigInt(signedCertBundle.Certificate.SerialNumber)
 
@@ -299,6 +321,36 @@ func (b *backend) acmeFinalizeOrderHandler(ac *acmeContext, r *logical.Request, 
 		b.Logger().Error("failed to track billing for order", "order", orderId, "error", err)
 		err = nil
 	}
+
+	var role string
+	var issuerName string
+	var stored bool
+	if ac.Role != nil {
+		role = ac.Role.Name
+		stored = !ac.Role.NoStore
+	}
+	if ac.Issuer != nil {
+		issuerName = ac.Issuer.Name
+	}
+
+	b.pkiObserver.RecordPKIObservation(ac, r, observe.ObservationTypePKIAcmeFinalizeOrder,
+		observe.NewAdditionalPKIMetadata("role_name", role),
+		observe.NewAdditionalPKIMetadata("issuer_name", issuerName),
+		observe.NewAdditionalPKIMetadata("issuer_id", issuerId.String()),
+		observe.NewAdditionalPKIMetadata("order_id", order.OrderId),
+		observe.NewAdditionalPKIMetadata("stored", stored),
+		observe.NewAdditionalPKIMetadata("not_before", signedCertBundle.Certificate.NotBefore.Format(time.RFC3339)),
+		observe.NewAdditionalPKIMetadata("not_after", signedCertBundle.Certificate.NotAfter.Format(time.RFC3339)),
+		observe.NewAdditionalPKIMetadata("subject_key_id", signedCertBundle.Certificate.SubjectKeyId),
+		observe.NewAdditionalPKIMetadata("authority_key_id", signedCertBundle.Certificate.AuthorityKeyId),
+		observe.NewAdditionalPKIMetadata("public_key_algorithm", signedCertBundle.Certificate.PublicKeyAlgorithm.String()),
+		observe.NewAdditionalPKIMetadata("public_key_size", certutil.GetPublicKeySize(signedCertBundle.Certificate.PublicKey)),
+		observe.NewAdditionalPKIMetadata("common_name", signedCertBundle.Certificate.Subject.CommonName),
+		observe.NewAdditionalPKIMetadata("serial_number", parsing.SerialFromCert(signedCertBundle.Certificate)),
+		observe.NewAdditionalPKIMetadata("order_expires", order.Expires.Format(time.RFC3339)),
+		observe.NewAdditionalPKIMetadata("status", ACMEOrderValid),
+		observe.NewAdditionalPKIMetadata("account_id", order.AccountId),
+	)
 
 	return formatOrderResponse(ac, order), nil
 }
@@ -523,7 +575,7 @@ func issueCertFromCsr(ac *acmeContext, csr *x509.CertificateRequest) (*certutil.
 	// (TLS) clients are mostly verifying against server's DNS SANs.
 	maybeAugmentReqDataWithSuitableCN(ac, csr, data)
 
-	signingBundle, issuerId, err := ac.sc.fetchCAInfoWithIssuer(ac.Issuer.ID.String(), issuing.IssuanceUsage)
+	signingBundle, issuer, err := ac.sc.fetchCAInfoWithIssuer(ac.Issuer.ID.String(), issuing.IssuanceUsage)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed loading CA %s: %w", ac.Issuer.ID.String(), err)
 	}
@@ -580,7 +632,7 @@ func issueCertFromCsr(ac *acmeContext, csr *x509.CertificateRequest) (*certutil.
 		return nil, "", fmt.Errorf("%w: refusing to sign CSR: %s", ErrBadCSR, err.Error())
 	}
 
-	if err = issuing.VerifyCertificate(ac.Context, ac.sc.Storage, issuerId, parsedBundle); err != nil {
+	if err = issuing.VerifyCertificate(ac.Issuer, parsedBundle); err != nil {
 		return nil, "", fmt.Errorf("verification of parsed bundle failed: %w", err)
 	}
 
@@ -592,7 +644,7 @@ func issueCertFromCsr(ac *acmeContext, csr *x509.CertificateRequest) (*certutil.
 		}
 	}
 
-	return parsedBundle, issuerId, err
+	return parsedBundle, issuer.ID, err
 }
 
 func parseCsrFromFinalize(data map[string]interface{}) (*x509.CertificateRequest, error) {
@@ -636,7 +688,7 @@ func parseCsrFromFinalize(data map[string]interface{}) (*x509.CertificateRequest
 	return csr, nil
 }
 
-func (b *backend) acmeGetOrderHandler(ac *acmeContext, _ *logical.Request, fields *framework.FieldData, uc *jwsCtx, _ map[string]interface{}, _ *acmeAccount) (*logical.Response, error) {
+func (b *backend) acmeGetOrderHandler(ac *acmeContext, req *logical.Request, fields *framework.FieldData, uc *jwsCtx, _ map[string]interface{}, _ *acmeAccount) (*logical.Response, error) {
 	orderId := fields.Get("order_id").(string)
 
 	order, err := b.GetAcmeState().LoadOrder(ac, uc, orderId)
@@ -672,10 +724,28 @@ func (b *backend) acmeGetOrderHandler(ac *acmeContext, _ *logical.Request, field
 		order.AuthorizationIds = filteredAuthorizationIds
 	}
 
+	var role string
+	var issuerName string
+	var issuerId string
+	if ac.Role != nil {
+		role = ac.Role.Name
+	}
+	if ac.Issuer != nil {
+		issuerName = ac.Issuer.Name
+		issuerId = ac.Issuer.ID.String()
+	}
+
+	b.pkiObserver.RecordPKIObservation(ac, req, observe.ObservationTypePKIAcmeGetOrder,
+		observe.NewAdditionalPKIMetadata("role_name", role),
+		observe.NewAdditionalPKIMetadata("issuer_name", issuerName),
+		observe.NewAdditionalPKIMetadata("issuer_id", issuerId),
+		observe.NewAdditionalPKIMetadata("order_id", orderId),
+	)
+
 	return formatOrderResponse(ac, order), nil
 }
 
-func (b *backend) acmeListOrdersHandler(ac *acmeContext, _ *logical.Request, _ *framework.FieldData, uc *jwsCtx, _ map[string]interface{}, acct *acmeAccount) (*logical.Response, error) {
+func (b *backend) acmeListOrdersHandler(ac *acmeContext, req *logical.Request, _ *framework.FieldData, uc *jwsCtx, _ map[string]interface{}, acct *acmeAccount) (*logical.Response, error) {
 	orderIds, err := b.GetAcmeState().ListOrderIds(ac.sc, acct.KeyId)
 	if err != nil {
 		return nil, err
@@ -704,10 +774,28 @@ func (b *backend) acmeListOrdersHandler(ac *acmeContext, _ *logical.Request, _ *
 		},
 	}
 
+	var role string
+	var issuerName string
+	var issuerId string
+	if ac.Role != nil {
+		role = ac.Role.Name
+	}
+	if ac.Issuer != nil {
+		issuerName = ac.Issuer.Name
+		issuerId = ac.Issuer.ID.String()
+	}
+
+	b.pkiObserver.RecordPKIObservation(ac, req, observe.ObservationTypePKIAcmeListOrders,
+		observe.NewAdditionalPKIMetadata("role_name", role),
+		observe.NewAdditionalPKIMetadata("issuer_name", issuerName),
+		observe.NewAdditionalPKIMetadata("issuer_id", issuerId),
+		observe.NewAdditionalPKIMetadata("order_ids", orderIds),
+	)
+
 	return resp, nil
 }
 
-func (b *backend) acmeNewOrderHandler(ac *acmeContext, _ *logical.Request, _ *framework.FieldData, _ *jwsCtx, data map[string]interface{}, account *acmeAccount) (*logical.Response, error) {
+func (b *backend) acmeNewOrderHandler(ac *acmeContext, req *logical.Request, _ *framework.FieldData, _ *jwsCtx, data map[string]interface{}, account *acmeAccount) (*logical.Response, error) {
 	identifiers, err := parseOrderIdentifiers(data)
 	if err != nil {
 		return nil, err
@@ -784,6 +872,29 @@ func (b *backend) acmeNewOrderHandler(ac *acmeContext, _ *logical.Request, _ *fr
 	// > If the server is willing to issue the requested certificate, it
 	// > responds with a 201 (Created) response.
 	resp.Data[logical.HTTPStatusCode] = http.StatusCreated
+
+	var role string
+	var issuerName string
+	var issuerId string
+	if ac.Role != nil {
+		role = ac.Role.Name
+	}
+	if ac.Issuer != nil {
+		issuerName = ac.Issuer.Name
+		issuerId = ac.Issuer.ID.String()
+	}
+
+	b.pkiObserver.RecordPKIObservation(ac, req, observe.ObservationTypePKIAcmeNewOrder,
+		observe.NewAdditionalPKIMetadata("role_name", role),
+		observe.NewAdditionalPKIMetadata("issuer_name", issuerName),
+		observe.NewAdditionalPKIMetadata("issuer_id", issuerId),
+		observe.NewAdditionalPKIMetadata("order_not_before", notBefore.Format(time.RFC3339)),
+		observe.NewAdditionalPKIMetadata("order_not_after", notAfter.Format(time.RFC3339)),
+		observe.NewAdditionalPKIMetadata("order_id", order.OrderId),
+		observe.NewAdditionalPKIMetadata("order_expires", order.Expires.Format(time.RFC3339)),
+		observe.NewAdditionalPKIMetadata("account_id", order.AccountId),
+	)
+
 	return resp, nil
 }
 

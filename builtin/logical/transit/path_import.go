@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package transit
@@ -222,12 +222,16 @@ func (b *backend) pathImportWrite(ctx context.Context, req *logical.Request, d *
 		polReq.KeyType = keysutil.KeyType_AES256_CMAC
 	case "aes192-cmac":
 		polReq.KeyType = keysutil.KeyType_AES192_CMAC
+	case "aes128-cbc":
+		polReq.KeyType = keysutil.KeyType_AES128_CBC
+	case "aes256-cbc":
+		polReq.KeyType = keysutil.KeyType_AES256_CBC
 	default:
 		return logical.ErrorResponse(fmt.Sprintf("unknown key type: %v", keyType)), logical.ErrInvalidRequest
 	}
 
-	if polReq.KeyType.CMACSupported() && !constants.IsEnterprise {
-		return logical.ErrorResponse(ErrCmacEntOnly.Error()), logical.ErrInvalidRequest
+	if polReq.KeyType.IsEnterpriseOnly() && !constants.IsEnterprise {
+		return logical.ErrorResponse(ErrKeyTypeEntOnly, polReq.KeyType), logical.ErrInvalidRequest
 	}
 
 	p, _, err := b.GetPolicy(ctx, polReq, b.GetRandomReader())
@@ -251,6 +255,15 @@ func (b *backend) pathImportWrite(ctx context.Context, req *logical.Request, d *
 	if err != nil {
 		return nil, err
 	}
+
+	b.TryRecordObservationWithRequest(ctx, req, ObservationTypeTransitKeyImport, map[string]interface{}{
+		"key_name":               name,
+		"type":                   polReq.KeyType,
+		"derived":                polReq.Derived,
+		"exportable":             polReq.Exportable,
+		"allow_plaintext_backup": polReq.AllowPlaintextBackup,
+		"auto_rotate_period":     int64(autoRotatePeriod.Seconds()),
+	})
 
 	return nil, nil
 }
@@ -293,14 +306,16 @@ func (b *backend) pathImportVersionWrite(ctx context.Context, req *logical.Reque
 		return resp, err
 	}
 
+	var versionToUpdate *int
 	// Get param version if set else import a new version.
 	if version, ok := d.GetOk("version"); ok {
-		versionToUpdate := version.(int)
+		versionValue := version.(int)
+		versionToUpdate = &versionValue
 
 		// Check if given version can be updated given input
-		err = p.KeyVersionCanBeUpdated(versionToUpdate, isCiphertextSet)
+		err = p.KeyVersionCanBeUpdated(*versionToUpdate, isCiphertextSet)
 		if err == nil {
-			err = p.ImportPrivateKeyForVersion(ctx, req.Storage, versionToUpdate, key)
+			err = p.ImportPrivateKeyForVersion(ctx, req.Storage, *versionToUpdate, key)
 		}
 	} else {
 		err = p.ImportPublicOrPrivate(ctx, req.Storage, key, isCiphertextSet, b.GetRandomReader())
@@ -309,6 +324,12 @@ func (b *backend) pathImportVersionWrite(ctx context.Context, req *logical.Reque
 	if err != nil {
 		return nil, err
 	}
+
+	metadata := b.keyPolicyObservationMetadata(p)
+	if versionToUpdate != nil {
+		metadata["import_version"] = *versionToUpdate
+	}
+	b.TryRecordObservationWithRequest(ctx, req, ObservationTypeTransitKeyImport, metadata)
 
 	return nil, nil
 }

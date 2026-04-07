@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -13,6 +13,10 @@ import type FlashMessageService from 'vault/services/flash-messages';
 import type SecretsEngineResource from 'vault/resources/secrets/engine';
 import type ApiService from 'vault/services/api';
 import type RouterService from '@ember/routing/router-service';
+import type VersionService from 'vault/services/version';
+import engineDisplayData from 'vault/helpers/engines-display-data';
+import { getEffectiveEngineType } from 'vault/utils/external-plugin-helpers';
+import { ALL_ENGINES } from 'vault/utils/all-engines-metadata';
 
 /**
  * @module SecretEngineList handles the display of the list of secret engines, including the filtering.
@@ -33,11 +37,52 @@ export default class SecretEngineList extends Component<Args> {
   @service declare readonly flashMessages: FlashMessageService;
   @service declare readonly api: ApiService;
   @service declare readonly router: RouterService;
+  @service declare readonly version: VersionService;
 
-  @tracked secretEngineOptions: Array<string> | [] = [];
-  @tracked selectedEngineType = '';
-  @tracked selectedEngineName = '';
   @tracked engineToDisable: SecretsEngineResource | undefined = undefined;
+
+  @tracked engineTypeFilters: Array<string> = [];
+  @tracked engineVersionFilters: Array<string> = [];
+  @tracked searchText = '';
+
+  // search text for dropdown filters
+  @tracked typeSearchText = '';
+  @tracked versionSearchText = '';
+
+  tableColumns = [
+    {
+      key: 'path',
+      label: 'Engine path',
+      isSortable: true,
+      width: '250px',
+      customTableItem: true,
+    },
+    {
+      key: 'accessor',
+      label: 'Accessor',
+      width: '150px',
+    },
+    {
+      key: 'description',
+      label: 'Description',
+      width: '300px',
+    },
+    {
+      key: 'running_plugin_version',
+      label: 'Version',
+      isSortable: true,
+      width: '170px',
+    },
+    {
+      key: 'popupMenu',
+      label: 'Action',
+      width: '75px',
+    },
+  ];
+
+  get clusterName() {
+    return this.version.clusterName;
+  }
 
   get displayableBackends() {
     return this.args.secretEngines.filter((backend) => backend.shouldIncludeInList);
@@ -45,71 +90,171 @@ export default class SecretEngineList extends Component<Args> {
 
   get sortedDisplayableBackends() {
     // show supported secret engines first and then organize those by id.
-    const sortedBackends = this.displayableBackends.sort(
-      (a, b) => Number(b.isSupportedBackend) - Number(a.isSupportedBackend) || a.id.localeCompare(b.id)
-    );
+    let sortedBackends = this.displayableBackends
+      .slice()
+      .sort(
+        (a, b) => Number(b.isSupportedBackend) - Number(a.isSupportedBackend) || a.id.localeCompare(b.id)
+      );
 
-    // return an options list to filter by engine type, ex: 'kv'
-    if (this.selectedEngineType) {
-      // check first if the user has also filtered by name.
-      if (this.selectedEngineName) {
-        return sortedBackends.filter((backend) => this.selectedEngineName === backend.id);
-      }
-      // otherwise filter by engine type
-      return sortedBackends.filter((backend) => this.selectedEngineType === backend.engineType);
+    // filters by engine type, ex: 'kv'
+    if (this.engineTypeFilters.length > 0) {
+      sortedBackends = sortedBackends.filter((backend) => {
+        const effectiveType = getEffectiveEngineType(backend.engineType);
+        return this.engineTypeFilters.includes(effectiveType);
+      });
     }
 
-    // return an options list to filter by engine name, ex: 'secret'
-    if (this.selectedEngineName) {
-      return sortedBackends.filter((backend) => this.selectedEngineName === backend.id);
+    // filters by engine version, ex: 'v1.21.0...'
+    if (this.engineVersionFilters.length > 0) {
+      sortedBackends = sortedBackends.filter((backend) =>
+        this.engineVersionFilters.includes(backend.running_plugin_version)
+      );
+    }
+
+    // if there is search text, filter path name by that
+    if (this.searchText.trim() !== '') {
+      sortedBackends = sortedBackends.filter((backend) =>
+        backend.path.toLowerCase().includes(this.searchText.toLowerCase())
+      );
     }
     // no filters, return full sorted list.
     return sortedBackends;
   }
 
-  // Filtering & searching
+  // Returns filter options for engine type dropdown
+  get typeFilterOptions() {
+    // if there is search text, filter types by that
+    if (this.typeSearchText.trim() !== '') {
+      return this.displayableBackends.filter((backend) => {
+        const effectiveType = getEffectiveEngineType(backend.engineType);
+        return effectiveType.toLowerCase().includes(this.typeSearchText.toLowerCase());
+      });
+    }
+
+    return this.displayableBackends;
+  }
+
+  // Returns filter options for version dropdown
+  get versionFilterOptions() {
+    // if there is search text, filter versions by that
+    if (this.versionSearchText.trim() !== '') {
+      // filtered by sorted backends array since an engine type filter has to be selected first
+      return this.sortedDisplayableBackends.filter((backend) =>
+        backend.running_plugin_version.toLowerCase().includes(this.versionSearchText.toLowerCase())
+      );
+    }
+    return this.sortedDisplayableBackends;
+  }
+
+  // Returns filtered engines list by type
   get secretEngineArrayByType() {
-    const arrayOfAllEngineTypes = this.sortedDisplayableBackends.map((modelObject) => modelObject.engineType);
-    // filter out repeated engineTypes (e.g. [kv, kv] => [kv])
-    const arrayOfUniqueEngineTypes = [...new Set(arrayOfAllEngineTypes)];
+    const arrayOfAllEffectiveTypes = this.typeFilterOptions.map((modelObject) =>
+      getEffectiveEngineType(modelObject.engineType)
+    );
+    // filter out repeated effective types (e.g. [kv, kv] => [kv])
+    const arrayOfUniqueEffectiveTypes = [...new Set(arrayOfAllEffectiveTypes)];
 
-    return arrayOfUniqueEngineTypes.map((engineType) => ({
-      name: engineType,
-      id: engineType,
+    return arrayOfUniqueEffectiveTypes.map((effectiveType) => ({
+      name: effectiveType,
+      id: effectiveType,
+      icon: engineDisplayData(effectiveType)?.glyph ?? 'lock',
     }));
   }
 
-  get secretEngineArrayByName() {
-    return this.sortedDisplayableBackends.map((modelObject) => ({
-      name: modelObject.id,
-      id: modelObject.id,
+  // Returns filtered engines list by version
+  get secretEngineArrayByVersions() {
+    const arrayOfAllEngineVersions = this.versionFilterOptions.map(
+      (modelObject) => modelObject.running_plugin_version
+    );
+    // filter out repeated engineVersions (e.g. [1.0, 1.0] => [1.0])
+    const arrayOfUniqueEngineVersions = [...new Set(arrayOfAllEngineVersions)];
+    return arrayOfUniqueEngineVersions.map((version) => ({
+      version,
+      id: version,
     }));
   }
 
+  // Returns engine resource data for a given engine path, needed to get icon and other metadata from SecretEnginesResource
+  getEngineResourceData = (enginePath: string) => {
+    return this.displayableBackends.find((backend) => backend.path === enginePath);
+  };
+
+  generateToolTipText = (backend: SecretsEngineResource) => {
+    const displayData = engineDisplayData(backend.type);
+
+    if (!displayData) {
+      return;
+    } else if (backend.isSupportedBackend) {
+      if (backend.type === 'kv') {
+        // If the backend is a KV engine, include the version in the tooltip.
+        return `${displayData.displayName} version ${backend.version}`;
+      } else {
+        return `${displayData.displayName}`;
+      }
+    } else if (!ALL_ENGINES.find((engine) => engine.type === backend.type)) {
+      // If a mounted engine type doesn't match any known type in our static metadata, set this tooltip.
+      // Handles issue when a user externally mounts an engine that doesn't follow the expected naming conventions for what's in the binary, despite being a valid engine.
+      return `This engine's type is not recognized by the UI. Please use the CLI to manage this engine.`;
+    } else {
+      // If the engine type is recognized but not supported, we only show configuration view and set this tooltip.
+      return 'The UI only supports configuration views for these secret engines. The CLI must be used to manage other engine resources.';
+    }
+  };
+
   @action
-  filterEngineType(type: string[]) {
-    const [selectedType] = type;
-    this.selectedEngineType = selectedType || '';
+  setSearchText(type: string, event: Event) {
+    const target = event.target as HTMLInputElement;
+    if (type === 'type') {
+      this.typeSearchText = target.value;
+    } else if (type === 'version') {
+      this.versionSearchText = target.value;
+    } else {
+      this.searchText = target.value;
+    }
   }
 
   @action
-  filterEngineName(name: string[]) {
-    const [selectedName] = name;
-    this.selectedEngineName = selectedName || '';
+  filterByEngineType(type: string) {
+    if (this.engineTypeFilters.includes(type)) {
+      this.engineTypeFilters = this.engineTypeFilters.filter((t) => t !== type);
+    } else {
+      this.engineTypeFilters = [...this.engineTypeFilters, type];
+    }
+  }
+
+  @action
+  filterByEngineVersion(version: string) {
+    if (this.engineVersionFilters.includes(version)) {
+      this.engineVersionFilters = this.engineVersionFilters.filter((v) => v !== version);
+    } else {
+      this.engineVersionFilters = [...this.engineVersionFilters, version];
+    }
+  }
+
+  @action
+  clearAllFilters() {
+    this.engineTypeFilters = [];
+    this.engineVersionFilters = [];
+  }
+
+  async disableSingleEngine(engine: SecretsEngineResource) {
+    const { engineType, id, path } = engine;
+    try {
+      await this.api.sys.mountsDisableSecretsEngine(id);
+      this.flashMessages.success(`The ${engineType} Secrets Engine at ${path} has been disabled.`);
+    } catch (err) {
+      const { message } = await this.api.parseError(err);
+      this.flashMessages.danger(
+        `There was an error disabling the ${engineType} Secrets Engine at ${path}: ${message}.`
+      );
+    }
   }
 
   @dropTask
   *disableEngine(engine: SecretsEngineResource) {
-    const { engineType, id, path } = engine;
     try {
-      yield this.api.sys.mountsDisableSecretsEngine(id);
-      this.flashMessages.success(`The ${engineType} Secrets Engine at ${path} has been disabled.`);
-      this.router.transitionTo('vault.cluster.secrets.backends');
-    } catch (err) {
-      const { message } = yield this.api.parseError(err);
-      this.flashMessages.danger(
-        `There was an error disabling the ${engineType} Secrets Engines at ${path}: ${message}.`
-      );
+      yield this.disableSingleEngine(engine);
+      this.router.refresh('vault.cluster.secrets.backends');
     } finally {
       this.engineToDisable = undefined;
     }

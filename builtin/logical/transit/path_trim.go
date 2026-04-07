@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package transit
@@ -99,6 +99,8 @@ func (b *backend) pathTrimUpdate() framework.OperationFunc {
 			p.MinAvailableVersion = originalMinAvailableVersion
 			return nil, err
 		}
+
+		b.TryRecordObservationWithRequest(ctx, req, ObservationTypeTransitKeyTrim, b.keyPolicyObservationMetadata(p))
 
 		return b.formatKeyPolicy(p, nil)
 	}

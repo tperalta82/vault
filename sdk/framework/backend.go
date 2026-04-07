@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: MPL-2.0
 
 package framework
@@ -487,6 +487,35 @@ func (b *Backend) Route(path string) *Path {
 	return result
 }
 
+// RecoverSourcePathFieldData returns the captures from the recover source path
+// as field data
+func (b *Backend) RecoverSourcePathFieldData(req *logical.Request) (*FieldData, error) {
+	if req.RecoverSourcePath == "" {
+		return nil, fmt.Errorf("request has no recover source path")
+	}
+	newPath, _ := b.route(req.Path)
+	sourcePath, sourceCaptures := b.route(req.RecoverSourcePath)
+	if sourcePath == nil || sourcePath.Pattern != newPath.Pattern {
+		return nil, fmt.Errorf("recover source path %q does not match request path %q", req.RecoverSourcePath, req.Path)
+	}
+
+	raw := make(map[string]interface{}, len(sourceCaptures))
+	for k, v := range sourceCaptures {
+		raw[k] = v
+	}
+	fd := FieldData{
+		Raw:    raw,
+		Schema: sourcePath.Fields,
+	}
+
+	err := fd.Validate()
+	if err != nil {
+		return nil, fmt.Errorf("field validation of recover source path failed: %w", err)
+	}
+
+	return &fd, nil
+}
+
 // Secret is used to look up the secret with the given type.
 func (b *Backend) Secret(k string) *Secret {
 	for _, s := range b.Secrets {
@@ -696,6 +725,11 @@ func (b *Backend) handleRotation(ctx context.Context, req *logical.Request) (*lo
 		return nil, logical.ErrUnsupportedOperation
 	}
 
+	// rotation is a write operation, so we short-circuit the request
+	if !b.WriteSafeReplicationState() {
+		return nil, logical.ErrReadOnly
+	}
+
 	err := b.RotateCredential(ctx, req)
 	if err != nil {
 		return nil, err
@@ -787,6 +821,41 @@ func (b *Backend) RecordObservation(ctx context.Context, observationType string,
 		return ErrNoObservations
 	}
 	return b.observations.RecordObservationFromPlugin(ctx, observationType, data)
+}
+
+// RecordObservationWithRequest is used to record observations through the
+// plugin's observation system. It attaches information from the request to the
+// observation data. The request path, client ID, entity ID, and request ID are
+// included.
+// This method returns ErrNoObservations if the observation system has not been
+// configured or enabled.
+func (b *Backend) RecordObservationWithRequest(ctx context.Context, req *logical.Request, observationType string, data map[string]interface{}) error {
+	if b.observations == nil {
+		return ErrNoObservations
+	}
+
+	// Attach request information to the observation data
+	if req != nil {
+		if data == nil {
+			data = make(map[string]interface{})
+		}
+		data["path"] = req.Path
+		data["client_id"] = req.ClientID
+		data["entity_id"] = req.EntityID
+		data["request_id"] = req.ID
+	}
+
+	return b.observations.RecordObservationFromPlugin(ctx, observationType, data)
+}
+
+// TryRecordObservationWithRequest is like RecordObservationWithRequest but
+// logs a warning instead of returning an error if recording the observation fails
+// for reasons other than the observation system not being configured/enabled
+func (b *Backend) TryRecordObservationWithRequest(ctx context.Context, req *logical.Request, observationType string, data map[string]interface{}) {
+	err := b.RecordObservationWithRequest(ctx, req, observationType, data)
+	if err != nil && !errors.Is(err, ErrNoObservations) {
+		b.Logger().Warn("failed to record observation", "error", err, "observation_type", observationType)
+	}
 }
 
 // FieldSchema is a basic schema to describe the format of a path field.

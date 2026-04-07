@@ -4,11 +4,14 @@ package configutil
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _EntropyModeName = "UnknownAugmentation"
 
 var _EntropyModeIndex = [...]uint8{0, 7, 19}
+
+const _EntropyModeLowerName = "unknownaugmentation"
 
 func (i EntropyMode) String() string {
 	if i < 0 || i >= EntropyMode(len(_EntropyModeIndex)-1) {
@@ -17,11 +20,26 @@ func (i EntropyMode) String() string {
 	return _EntropyModeName[_EntropyModeIndex[i]:_EntropyModeIndex[i+1]]
 }
 
-var _EntropyModeValues = []EntropyMode{0, 1}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _EntropyModeNoOp() {
+	var x [1]struct{}
+	_ = x[EntropyUnknown-(0)]
+	_ = x[EntropyAugmentation-(1)]
+}
+
+var _EntropyModeValues = []EntropyMode{EntropyUnknown, EntropyAugmentation}
 
 var _EntropyModeNameToValueMap = map[string]EntropyMode{
-	_EntropyModeName[0:7]:  0,
-	_EntropyModeName[7:19]: 1,
+	_EntropyModeName[0:7]:       EntropyUnknown,
+	_EntropyModeLowerName[0:7]:  EntropyUnknown,
+	_EntropyModeName[7:19]:      EntropyAugmentation,
+	_EntropyModeLowerName[7:19]: EntropyAugmentation,
+}
+
+var _EntropyModeNames = []string{
+	_EntropyModeName[0:7],
+	_EntropyModeName[7:19],
 }
 
 // EntropyModeString retrieves an enum value from the enum constants string name.
@@ -30,12 +48,23 @@ func EntropyModeString(s string) (EntropyMode, error) {
 	if val, ok := _EntropyModeNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _EntropyModeNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to EntropyMode values", s)
 }
 
 // EntropyModeValues returns all values of the enum
 func EntropyModeValues() []EntropyMode {
 	return _EntropyModeValues
+}
+
+// EntropyModeStrings returns a slice of all String values of the enum
+func EntropyModeStrings() []string {
+	strs := make([]string, len(_EntropyModeNames))
+	copy(strs, _EntropyModeNames)
+	return strs
 }
 
 // IsAEntropyMode returns "true" if the value is listed in the enum definition. "false" otherwise

@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: MPL-2.0
 
 package rotation
@@ -47,6 +47,25 @@ type RotationJobConfigureRequest struct {
 type RotationJobDeregisterRequest struct {
 	MountPoint string
 	ReqPath    string
+}
+
+// RotationInfoRequest is the request struct used by SystemView.GetRotationInformation.
+type RotationInfoRequest struct {
+	// ReqPath is the plugin-local path to the credential, and needs to match the ReqPath value that
+	// was supplied in schedule creation with RegisterRotationJob
+	ReqPath string
+}
+
+// RotationInfoResponse is the response struct returned by SystemView.GetRotationInformation.
+type RotationInfoResponse struct {
+	// NextVaultRotation is the scheduled time of the next rotation.
+	NextVaultRotation time.Time
+
+	// LastVaultRotation is the time of the prior rotation.
+	LastVaultRotation time.Time
+
+	// TTL is integer seconds until next rotation, conventionally clamped to 0 (i.e., will not be negative)
+	TTL int64
 }
 
 func (s *RotationJob) Validate() error {

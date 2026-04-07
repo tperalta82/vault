@@ -1,9 +1,8 @@
-@use '../utils/color_variables';
 @use '../utils/font_variables';
 @use '../utils/size_variables';
 
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -23,7 +22,7 @@
   word-break: break-word;
 
   > a {
-    color: color_variables.$black;
+    color: hsl(0, 0%, 4%);
     text-decoration: none;
   }
 
@@ -64,5 +63,5 @@
 .is-subtitle-gray {
   text-transform: uppercase;
   font-size: size_variables.$size-7;
-  color: color_variables.$ui-gray-500;
+  color: var(--token-color-palette-neutral-400);
 }

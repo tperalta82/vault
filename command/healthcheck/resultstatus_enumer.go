@@ -4,11 +4,14 @@ package healthcheck
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _ResultStatusName = "not_applicableokinformationalwarningcriticalinvalid_versioninsufficient_permissions"
 
 var _ResultStatusIndex = [...]uint8{0, 14, 16, 29, 36, 44, 59, 83}
+
+const _ResultStatusLowerName = "not_applicableokinformationalwarningcriticalinvalid_versioninsufficient_permissions"
 
 func (i ResultStatus) String() string {
 	if i < 0 || i >= ResultStatus(len(_ResultStatusIndex)-1) {
@@ -17,16 +20,46 @@ func (i ResultStatus) String() string {
 	return _ResultStatusName[_ResultStatusIndex[i]:_ResultStatusIndex[i+1]]
 }
 
-var _ResultStatusValues = []ResultStatus{0, 1, 2, 3, 4, 5, 6}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _ResultStatusNoOp() {
+	var x [1]struct{}
+	_ = x[ResultNotApplicable-(0)]
+	_ = x[ResultOK-(1)]
+	_ = x[ResultInformational-(2)]
+	_ = x[ResultWarning-(3)]
+	_ = x[ResultCritical-(4)]
+	_ = x[ResultInvalidVersion-(5)]
+	_ = x[ResultInsufficientPermissions-(6)]
+}
+
+var _ResultStatusValues = []ResultStatus{ResultNotApplicable, ResultOK, ResultInformational, ResultWarning, ResultCritical, ResultInvalidVersion, ResultInsufficientPermissions}
 
 var _ResultStatusNameToValueMap = map[string]ResultStatus{
-	_ResultStatusName[0:14]:  0,
-	_ResultStatusName[14:16]: 1,
-	_ResultStatusName[16:29]: 2,
-	_ResultStatusName[29:36]: 3,
-	_ResultStatusName[36:44]: 4,
-	_ResultStatusName[44:59]: 5,
-	_ResultStatusName[59:83]: 6,
+	_ResultStatusName[0:14]:       ResultNotApplicable,
+	_ResultStatusLowerName[0:14]:  ResultNotApplicable,
+	_ResultStatusName[14:16]:      ResultOK,
+	_ResultStatusLowerName[14:16]: ResultOK,
+	_ResultStatusName[16:29]:      ResultInformational,
+	_ResultStatusLowerName[16:29]: ResultInformational,
+	_ResultStatusName[29:36]:      ResultWarning,
+	_ResultStatusLowerName[29:36]: ResultWarning,
+	_ResultStatusName[36:44]:      ResultCritical,
+	_ResultStatusLowerName[36:44]: ResultCritical,
+	_ResultStatusName[44:59]:      ResultInvalidVersion,
+	_ResultStatusLowerName[44:59]: ResultInvalidVersion,
+	_ResultStatusName[59:83]:      ResultInsufficientPermissions,
+	_ResultStatusLowerName[59:83]: ResultInsufficientPermissions,
+}
+
+var _ResultStatusNames = []string{
+	_ResultStatusName[0:14],
+	_ResultStatusName[14:16],
+	_ResultStatusName[16:29],
+	_ResultStatusName[29:36],
+	_ResultStatusName[36:44],
+	_ResultStatusName[44:59],
+	_ResultStatusName[59:83],
 }
 
 // ResultStatusString retrieves an enum value from the enum constants string name.
@@ -35,12 +68,23 @@ func ResultStatusString(s string) (ResultStatus, error) {
 	if val, ok := _ResultStatusNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _ResultStatusNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to ResultStatus values", s)
 }
 
 // ResultStatusValues returns all values of the enum
 func ResultStatusValues() []ResultStatus {
 	return _ResultStatusValues
+}
+
+// ResultStatusStrings returns a slice of all String values of the enum
+func ResultStatusStrings() []string {
+	strs := make([]string, len(_ResultStatusNames))
+	copy(strs, _ResultStatusNames)
+	return strs
 }
 
 // IsAResultStatus returns "true" if the value is listed in the enum definition. "false" otherwise

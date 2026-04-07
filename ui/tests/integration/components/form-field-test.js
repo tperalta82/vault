@@ -1,19 +1,21 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
 import EmberObject from '@ember/object';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { render, click, fillIn, findAll, setupOnerror } from '@ember/test-helpers';
+import { render, click, fillIn, findAll, setupOnerror, waitFor } from '@ember/test-helpers';
 import hbs from 'htmlbars-inline-precompile';
 import { create } from 'ember-cli-page-object';
 import sinon from 'sinon';
 import formFields from '../../pages/components/form-field';
 import { format, startOfDay } from 'date-fns';
+import codemirror, { getCodeEditorValue, setCodeEditorValue } from 'vault/tests/helpers/codemirror';
 
 import { GENERAL } from 'vault/tests/helpers/general-selectors';
+import AuthMethodForm from 'vault/forms/auth/method';
 
 const component = create(formFields);
 
@@ -107,39 +109,22 @@ module('Integration | Component | form field', function (hooks) {
   // LEGACY FORM FIELDS
   // ------------------
 
-  test('it renders: string', async function (assert) {
-    const [model, spy] = await setup.call(this, createAttr('foo', 'string', { defaultValue: 'default' }));
-    assert.strictEqual(component.fields.objectAt(0).labelValue, 'Foo', 'renders a label');
-    assert.strictEqual(component.fields.objectAt(0).inputValue, 'default', 'renders default value');
-    assert.ok(component.hasInput, 'renders input for string');
-    await component.fields.objectAt(0).input('bar').change();
-
-    assert.strictEqual(model.get('foo'), 'bar');
-    assert.ok(spy.calledWith('foo', 'bar'), 'onChange called with correct args');
-  });
-
-  test('it renders: number', async function (assert) {
-    const [model, spy] = await setup.call(this, createAttr('foo', 'number', { defaultValue: 5 }));
-    assert.strictEqual(component.fields.objectAt(0).labelValue, 'Foo', 'renders a label');
-    assert.strictEqual(component.fields.objectAt(0).inputValue, '5', 'renders default value');
-    assert.ok(component.hasInput, 'renders input for number');
-    await component.fields.objectAt(0).input(8).change();
-
-    assert.strictEqual(model.get('foo'), '8');
-    assert.ok(spy.calledWith('foo', '8'), 'onChange called with correct args');
-  });
-
   test('it renders: object', async function (assert) {
     await setup.call(this, createAttr('foo', 'object'));
     assert.dom('[data-test-component="json-editor-title"]').hasText('Foo', 'renders a label');
     assert.ok(component.hasJSONEditor, 'renders the json editor');
   });
 
-  test('it renders: string as json with clear button', async function (assert) {
+  test('it renders: string as json with clear button and resets input', async function (assert) {
     await setup.call(this, createAttr('foo', 'string', { editType: 'json', allowReset: true }));
     assert.dom('[data-test-component="json-editor-title"]').hasText('Foo', 'renders a label');
     assert.ok(component.hasJSONEditor, 'renders the json editor');
     assert.ok(component.hasJSONClearButton, 'renders button that will clear the JSON value');
+    await waitFor('.cm-editor');
+    const editor = codemirror();
+    setCodeEditorValue(editor, 'some input');
+    await click('[data-test-json-clear-button]');
+    assert.strictEqual(getCodeEditorValue(editor), '', 'it clears the editor');
   });
 
   test('it renders: toggleButton', async function (assert) {
@@ -206,7 +191,7 @@ module('Integration | Component | form field', function (hooks) {
       .dom('.hds-form-helper-text')
       .hasText(`Enter the value as text. ${subText} See our documentation for help.`, 'renders subtext');
     assert.dom('.hds-form-helper-text a').exists('renders doc link');
-    await fillIn('[data-test-text-file-textarea]', 'hello world');
+    await fillIn(GENERAL.maskedInput, 'hello world');
   });
 
   test('it renders: editType ttl', async function (assert) {
@@ -283,14 +268,13 @@ module('Integration | Component | form field', function (hooks) {
     assert.strictEqual(component.fields.objectAt(0).labelValue, 'Not Foo', 'renders the label from options');
   });
 
-  test('it renders a help tooltip and placeholder', async function (assert) {
+  test('it renders a help tooltip', async function (assert) {
     await setup.call(
       this,
-      createAttr('foo', 'string', { helpText: 'Here is some help text', placeholder: 'example::value' })
+      createAttr('foo', 'string', { editType: 'stringArray', helpText: 'Here is some help text' })
     );
     await component.tooltipTrigger();
     assert.ok(component.hasTooltip, 'renders the tooltip component');
-    assert.dom(GENERAL.inputByAttr('foo')).hasAttribute('placeholder', 'example::value');
   });
 
   test('it should not expand and toggle ttl when default 0s value is present', async function (assert) {
@@ -324,14 +308,10 @@ module('Integration | Component | form field', function (hooks) {
   });
 
   test('it should show validation warning', async function (assert) {
-    const model = this.owner.lookup('service:store').createRecord('auth-method');
-    model.path = 'foo bar';
-    this.validations = model.validate().state;
-    this.setProperties({
-      model,
-      attr: createAttr('path', 'string'),
-      onChange: () => {},
-    });
+    this.model = new AuthMethodForm({ path: 'foo bar' });
+    this.attr = createAttr('path', 'string');
+    this.onChange = () => {};
+    this.validations = this.model.toJSON().state;
 
     await render(
       hbs`<FormField @attr={{this.attr}} @model={{this.model}} @modelValidations={{this.validations}} @onChange={{this.onChange}} />`
@@ -1184,6 +1164,133 @@ module('Integration | Component | form field', function (hooks) {
   test('it renders: editType=boolean - with validation errors and warnings', async function (assert) {
     this.setProperties({
       attr: createAttr('myfield', '-', { editType: 'boolean' }),
+      model: { myfield: false },
+      modelValidations: {
+        myfield: {
+          isValid: false,
+          errors: ['Error message #1', 'Error message #2'],
+          warnings: ['Warning message #1', 'Warning message #2'],
+        },
+      },
+      onChange: () => {},
+    });
+
+    await render(
+      hbs`<FormField @attr={{this.attr}} @model={{this.model}} @modelValidations={{this.modelValidations}} @onChange={{this.onChange}} />`
+    );
+    assert
+      .dom(GENERAL.validationErrorByAttr('myfield'))
+      .exists('Validation error renders')
+      .hasText('Error message #1 Error message #2', 'Validation errors are combined');
+    assert
+      .dom(GENERAL.validationWarningByAttr('myfield'))
+      .exists('Validation warning renders')
+      .hasText('Warning message #1 Warning message #2', 'Validation warnings are combined');
+  });
+
+  // ––––– editType === undefined && (type === 'string' || type === 'number') –––––
+
+  test('it renders: editType=undefined type=string - as Hds::Form::TextInput', async function (assert) {
+    const [model, spy] = await setup.call(this, createAttr('myfield', 'string', { defaultValue: 'default' }));
+    assert
+      .dom('.field [class^="hds-form-field"] input[type="text"].hds-form-text-input')
+      .exists('renders as Hds::Form::TextInput::Field');
+    assert
+      .dom(`input[type=text]`)
+      .exists('renders input[type="text"]')
+      .hasAttribute(
+        'data-test-input',
+        'myfield',
+        'input[type="text"] has correct `data-test-input` attribute'
+      )
+      .hasAttribute('name', 'myfield', 'input[type="text"] has correct `name` attribute')
+      .hasAttribute('id', 'myfield', 'input[type="text"] has correct `id` attribute');
+    assert.dom(GENERAL.fieldLabel()).hasText('Myfield', 'renders the input[type="text"] label');
+    assert.dom(GENERAL.inputByAttr('myfield')).hasValue('default', 'renders default value');
+    await fillIn(GENERAL.inputByAttr('myfield'), 'bar');
+    assert.strictEqual(model.get('myfield'), 'bar');
+    assert.true(spy.calledWith('myfield', 'bar'), 'onChange called with correct args');
+  });
+
+  test('it renders: editType=undefined type=number - as Hds::Form::TextInput', async function (assert) {
+    const [model, spy] = await setup.call(this, createAttr('myfield', 'number', { defaultValue: 123 }));
+    assert
+      .dom('.field [class^="hds-form-field"] input[type="text"].hds-form-text-input')
+      .exists('renders as Hds::Form::TextInput::Field');
+    assert
+      .dom(`input[type=text]`)
+      .exists('renders input[type="text"]')
+      .hasAttribute(
+        'data-test-input',
+        'myfield',
+        'input[type="text"] has correct `data-test-input` attribute'
+      )
+      .hasAttribute('name', 'myfield', 'input[type="text"] has correct `name` attribute')
+      .hasAttribute('id', 'myfield', 'input[type="text"] has correct `id` attribute');
+    assert.dom(GENERAL.fieldLabel()).hasText('Myfield', 'renders the input[type="text"] label');
+    assert.dom(GENERAL.inputByAttr('myfield')).hasValue('123', 'renders default value');
+    await fillIn(GENERAL.inputByAttr('myfield'), 1234);
+    assert.strictEqual(model.get('myfield'), '1234');
+    assert.true(spy.calledWith('myfield', '1234'), 'onChange called with correct args');
+  });
+
+  test('it renders: editType=undefined - with passed characterLimit, docLink, editDisabled, helpText, label, placeholder, subText', async function (assert) {
+    await setup.call(
+      this,
+      createAttr('myfield', 'string', {
+        characterLimit: 10,
+        docLink: '/docs',
+        editDisabled: true,
+        helpText: 'Some helpText',
+        label: 'Custom label',
+        placeholder: 'Custom placeholder',
+        subText: 'Some subText',
+      })
+    );
+    assert.dom(GENERAL.fieldLabel()).hasText('Custom label', 'renders the custom label from options');
+    assert
+      .dom('.hds-form-field__character-count')
+      .containsText('10', 'renders the characterLimit helper text from options');
+    assert
+      .dom(GENERAL.inputByAttr('myfield'))
+      .hasAttribute('placeholder', 'Custom placeholder', 'renders the placeholder from options')
+      .hasAttribute('disabled', '', 'renders the disabled attribute from options')
+      .hasAttribute('maxlength', '10', 'renders the characterLimit from options');
+    assert
+      .dom(GENERAL.helpTextByAttr('Some subText'))
+      .exists('renders `subText` option as HelperText')
+      .hasText(
+        'Some subText See our documentation for help.',
+        'renders the right subText string from options'
+      );
+    assert
+      .dom(`${GENERAL.helpTextByAttr('Some subText')} ${GENERAL.docLinkByAttr('/docs')}`)
+      .exists('renders `docLink` option as as link inside the subText');
+    assert
+      .dom(GENERAL.helpTextByAttr('Some helpText'))
+      .exists('renders `helpText` option as HelperText')
+      .hasText('Some helpText', 'renders the right helpText string from options');
+  });
+
+  test('it renders: editType=undefined - with readOnly when mode=edit', async function (assert) {
+    this.setProperties({
+      attr: createAttr('myfield', 'string', { readOnly: true }),
+      mode: 'edit',
+      model: { myfield: false },
+      onChange: () => {},
+    });
+
+    await render(
+      hbs`<FormField @attr={{this.attr}} @model={{this.model}} @mode={{this.mode}} @onChange={{this.onChange}} />`
+    );
+    assert
+      .dom(GENERAL.inputByAttr('myfield'))
+      .hasAttribute('readonly', '', 'renders the readOnly attribute from options');
+  });
+
+  test('it renders: editType=undefined - with validation errors and warnings', async function (assert) {
+    this.setProperties({
+      attr: createAttr('myfield', 'string'),
       model: { myfield: false },
       modelValidations: {
         myfield: {

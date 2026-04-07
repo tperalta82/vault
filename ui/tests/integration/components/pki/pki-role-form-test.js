@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -56,7 +56,7 @@ module('Integration | Component | pki-role-form', function (hooks) {
     assert
       .dom(GENERAL.fieldByAttr('noStoreMetadata'))
       .doesNotExist('noStoreMetadata is not shown b/c not enterprise');
-    assert.dom(GENERAL.inputByAttr('addBasicConstraints')).exists();
+    assert.dom(GENERAL.inputByAttr('basicConstraintsValidForNonCa')).exists();
     assert.dom(GENERAL.button('Domain handling')).exists('shows form-field group add domain handling');
     assert.dom(GENERAL.button('Key parameters')).exists('shows form-field group key params');
     assert.dom(GENERAL.button('Key usage')).exists('shows form-field group key usage');
@@ -86,7 +86,7 @@ module('Integration | Component | pki-role-form', function (hooks) {
 
   test('it should save a new pki role with various options selected', async function (assert) {
     // Key usage, Key params and Not valid after options are tested in their respective component tests
-    assert.expect(8);
+    assert.expect(7);
     this.server.post(`/${this.role.backend}/roles/test-role`, (schema, req) => {
       assert.ok(true, 'Request made to save role');
       const request = JSON.parse(req.requestBody);
@@ -123,14 +123,11 @@ module('Integration | Component | pki-role-form', function (hooks) {
     await click(GENERAL.submitButton);
 
     assert
-      .dom(GENERAL.inputByAttr('name'))
-      .hasClass('has-error-border', 'shows border error on role name field when no role name is submitted');
-    assert
-      .dom('[data-test-inline-error-message]')
+      .dom(GENERAL.validationErrorByAttr('name'))
       .includesText('Name is required.', 'show correct error message');
 
     await fillIn(GENERAL.inputByAttr('name'), 'test-role');
-    await click('[data-test-input="addBasicConstraints"]');
+    await click('[data-test-input="basicConstraintsValidForNonCa"]');
     await click(GENERAL.button('Domain handling'));
     await click('[data-test-input="allowedDomainsTemplate"]');
     await click(GENERAL.button('Policy identifiers'));

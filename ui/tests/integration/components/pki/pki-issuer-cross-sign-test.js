@@ -1,5 +1,5 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
@@ -337,7 +337,7 @@ module('Integration | Component | pki issuer cross sign', function (hooks) {
     assert
       .dom('[data-test-cross-sign-alert-message]')
       .hasText(
-        'certificate contains unsupported subject OIDs: 1.2.840.113549.1.9.1, certificate contains unsupported extension OIDs: 2.5.29.37'
+        'certificate contains unsupported subject OIDs: 1.2.840.113549.1.9.1, certificate contains unsupported extension OIDs: 2.5.29.37, unsupported key usage value on issuer certificate: DigitalSignature, KeyEncipherment'
       );
 
     for (const field of FIELDS) {

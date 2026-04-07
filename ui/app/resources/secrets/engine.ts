@@ -1,21 +1,33 @@
 /**
- * Copyright (c) HashiCorp, Inc.
+ * Copyright IBM Corp. 2016, 2025
  * SPDX-License-Identifier: BUSL-1.1
  */
 
 import { baseResourceFactory } from 'vault/resources/base-factory';
-import { supportedSecretBackends } from 'vault/helpers/supported-secret-backends';
+import {
+  supportedSecretBackends,
+  SupportedSecretBackendsEnum,
+} from 'vault/helpers/supported-secret-backends';
 import { isAddonEngine } from 'vault/utils/all-engines-metadata';
+import { getEffectiveEngineType } from 'vault/utils/external-plugin-helpers';
 import engineDisplayData from 'vault/helpers/engines-display-data';
 
-import type { SecretsEngine } from 'vault/secrets/engine';
+import type { Mount } from 'vault/mount';
 
-export default class SecretsEngineResource extends baseResourceFactory<SecretsEngine>() {
+export const SUPPORTS_RECOVERY = [
+  SupportedSecretBackendsEnum.CUBBYHOLE,
+  SupportedSecretBackendsEnum.KV, // only kv v1
+  SupportedSecretBackendsEnum.DATABASE,
+] as const;
+
+export type RecoverySupportedEngines = (typeof SUPPORTS_RECOVERY)[number];
+
+export default class SecretsEngineResource extends baseResourceFactory<Mount>() {
   id: string;
 
   #LIST_EXCLUDED_BACKENDS = ['system', 'identity'];
 
-  constructor(data: SecretsEngine) {
+  constructor(data: Mount) {
     super(data);
     // strip trailing slash from path for id since it is used in routing
     this.id = data.path.replace(/\/$/, '');
@@ -36,8 +48,15 @@ export default class SecretsEngineResource extends baseResourceFactory<SecretsEn
     return engineData?.glyph || 'lock';
   }
 
+  get effectiveEngineType() {
+    return getEffectiveEngineType(this.engineType);
+  }
+
   get isV2KV() {
-    return this.version === 2 && (this.engineType === 'kv' || this.engineType === 'generic');
+    return (
+      this.version === 2 &&
+      (this.effectiveEngineType === SupportedSecretBackendsEnum.KV || this.effectiveEngineType === 'generic')
+    );
   }
 
   get shouldIncludeInList() {
@@ -45,15 +64,15 @@ export default class SecretsEngineResource extends baseResourceFactory<SecretsEn
   }
 
   get isSupportedBackend() {
-    return supportedSecretBackends().includes(this.engineType);
+    return supportedSecretBackends().includes(this.effectiveEngineType as SupportedSecretBackendsEnum);
   }
 
   get backendLink() {
-    if (this.engineType === 'database') {
+    if (this.effectiveEngineType === 'database') {
       return 'vault.cluster.secrets.backend.overview';
     }
-    if (isAddonEngine(this.engineType, this.version)) {
-      const engine = engineDisplayData(this.engineType);
+    if (isAddonEngine(this.effectiveEngineType, this.version)) {
+      const engine = engineDisplayData(this.effectiveEngineType); // Use effective type to get proper metadata
       if (engine?.engineRoute) {
         return `vault.cluster.secrets.backend.${engine.engineRoute}`;
       }
@@ -66,13 +85,25 @@ export default class SecretsEngineResource extends baseResourceFactory<SecretsEn
   }
 
   get backendConfigurationLink() {
-    if (isAddonEngine(this.engineType, this.version)) {
-      return `vault.cluster.secrets.backend.${this.engineType}.configuration`;
+    if (isAddonEngine(this.effectiveEngineType, this.version)) {
+      return `vault.cluster.secrets.backend.${this.effectiveEngineType}.configuration`;
     }
     return `vault.cluster.secrets.backend.configuration`;
   }
 
   get localDisplay() {
     return this.local ? 'local' : 'replicated';
+  }
+
+  get supportsRecovery() {
+    if (!SUPPORTS_RECOVERY.includes(this.effectiveEngineType as RecoverySupportedEngines)) {
+      return false;
+    }
+
+    if (this.effectiveEngineType === SupportedSecretBackendsEnum.KV) {
+      return !this.isV2KV;
+    }
+
+    return true;
   }
 }

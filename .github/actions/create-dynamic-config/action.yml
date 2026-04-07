@@ -1,4 +1,4 @@
-# Copyright (c) HashiCorp, Inc.
+# Copyright IBM Corp. 2016, 2025
 # SPDX-License-Identifier: BUSL-1.1
 
 ---
@@ -39,7 +39,7 @@ runs:
         } | tee -a "$GITHUB_ENV"
     - name: Try to restore dynamic config from cache
       id: dyn-cfg-cache
-      uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+      uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       with:
         path: ${{ env.DYNAMIC_CONFIG_PATH }}
         key: dyn-cfg-${{ env.DYNAMIC_CONFIG_KEY }}
@@ -56,4 +56,9 @@ runs:
       shell: bash
       run: |
         # Make sure that any branch specific dynamic config has been generated
-        pipeline generate enos-dynamic-config -d ./enos --file enos-dynamic-config.hcl -v ${{ inputs.vault-version }} -e ${{ inputs.vault-edition }} -n 3 --log debug
+        pipeline generate enos-dynamic-config ${{ runner.debug && '--log debug' }}\
+          -d ./enos \
+          --file enos-dynamic-config.hcl \
+          -v ${{ inputs.vault-version }} \
+          -e ${{ inputs.vault-edition }} \
+          -n 3

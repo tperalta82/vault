@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2016, 2025
 // SPDX-License-Identifier: BUSL-1.1
 
 package github
@@ -13,7 +13,7 @@ import (
 
 // workflowRunTemplate is our template for rendering workflow runs in human
 // readable text.
-var workflowRunTemplate = template.Must(template.New("workflow_run").Funcs(template.FuncMap{
+var workflowRunTemplate = template.Must(template.New("workflow-run-text.tmpl").Funcs(template.FuncMap{
 	"boldify":              boldify,
 	"format_log_lines":     formatLogLines,
 	"intensify_status":     intensifyStatus,

@@ -1,5 +1,5 @@
 {{!
-  Copyright (c) HashiCorp, Inc.
+  Copyright IBM Corp. 2016, 2025
   SPDX-License-Identifier: BUSL-1.1
 }}
 
@@ -41,7 +41,7 @@
       @isMultiline={{true}}
       {{on "input" this.handleTextInput}}
       aria-labelledby="text-file-input-{{this.elementId}}"
-      data-test-text-file-textarea
+      data-test-masked-input
       as |F|
     >
       <F.HelperText>

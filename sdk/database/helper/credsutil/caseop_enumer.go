@@ -4,11 +4,14 @@ package credsutil
 
 import (
 	"fmt"
+	"strings"
 )
 
 const _CaseOpName = "keep_caseuppercaselowercase"
 
 var _CaseOpIndex = [...]uint8{0, 9, 18, 27}
+
+const _CaseOpLowerName = "keep_caseuppercaselowercase"
 
 func (i CaseOp) String() string {
 	if i < 0 || i >= CaseOp(len(_CaseOpIndex)-1) {
@@ -17,12 +20,30 @@ func (i CaseOp) String() string {
 	return _CaseOpName[_CaseOpIndex[i]:_CaseOpIndex[i+1]]
 }
 
-var _CaseOpValues = []CaseOp{0, 1, 2}
+// An "invalid array index" compiler error signifies that the constant values have changed.
+// Re-run the stringer command to generate them again.
+func _CaseOpNoOp() {
+	var x [1]struct{}
+	_ = x[KeepCase-(0)]
+	_ = x[Uppercase-(1)]
+	_ = x[Lowercase-(2)]
+}
+
+var _CaseOpValues = []CaseOp{KeepCase, Uppercase, Lowercase}
 
 var _CaseOpNameToValueMap = map[string]CaseOp{
-	_CaseOpName[0:9]:   0,
-	_CaseOpName[9:18]:  1,
-	_CaseOpName[18:27]: 2,
+	_CaseOpName[0:9]:        KeepCase,
+	_CaseOpLowerName[0:9]:   KeepCase,
+	_CaseOpName[9:18]:       Uppercase,
+	_CaseOpLowerName[9:18]:  Uppercase,
+	_CaseOpName[18:27]:      Lowercase,
+	_CaseOpLowerName[18:27]: Lowercase,
+}
+
+var _CaseOpNames = []string{
+	_CaseOpName[0:9],
+	_CaseOpName[9:18],
+	_CaseOpName[18:27],
 }
 
 // CaseOpString retrieves an enum value from the enum constants string name.
@@ -31,12 +52,23 @@ func CaseOpString(s string) (CaseOp, error) {
 	if val, ok := _CaseOpNameToValueMap[s]; ok {
 		return val, nil
 	}
+
+	if val, ok := _CaseOpNameToValueMap[strings.ToLower(s)]; ok {
+		return val, nil
+	}
 	return 0, fmt.Errorf("%s does not belong to CaseOp values", s)
 }
 
 // CaseOpValues returns all values of the enum
 func CaseOpValues() []CaseOp {
 	return _CaseOpValues
+}
+
+// CaseOpStrings returns a slice of all String values of the enum
+func CaseOpStrings() []string {
+	strs := make([]string, len(_CaseOpNames))
+	copy(strs, _CaseOpNames)
+	return strs
 }
 
 // IsACaseOp returns "true" if the value is listed in the enum definition. "false" otherwise
